@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays, Trash2, Clock } from "lucide-react";
+import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays, Trash2, Clock, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +34,8 @@ export function AttendanceLogger() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
   const [entries, setEntries] = useState<any[]>([]);
+  const [bulkDate, setBulkDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
 
   useEffect(() => {
     // Initializing entries with default date
@@ -49,18 +52,17 @@ export function AttendanceLogger() {
     })));
   }, []);
 
-  const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
-
-  const applyBulkShift = () => {
+  const applyBulkSettings = () => {
     setEntries(prev => prev.map(entry => ({
       ...entry,
+      date: bulkDate,
       shift: bulkShift,
       hours: bulkShift === '12-hour' ? 12 : 9,
       isModified: true
     })));
     toast({
-      title: "Bulk Shift Applied",
-      description: `All ${entries.length} records updated to standard ${bulkShift} hours for ${selectedMonth}.`,
+      title: "Bulk Settings Applied",
+      description: `Updated all records to ${bulkDate} and ${bulkShift} shift.`,
     });
   };
 
@@ -68,7 +70,7 @@ export function AttendanceLogger() {
     setEditingId(null);
     toast({
       title: "Entry Saved",
-      description: `Updated records for ${entries.find(e => e.id === id)?.name} for date ${entries.find(e => e.id === id)?.date}.`,
+      description: `Updated records for ${entries.find(e => e.id === id)?.name}.`,
     });
   };
 
@@ -101,7 +103,7 @@ export function AttendanceLogger() {
             <CalendarDays className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Payroll Period:</span>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[140px] h-8 bg-background border-border text-xs">
+              <SelectTrigger className="w-[160px] h-9 bg-background border-primary/30 text-sm font-semibold text-primary">
                 <SelectValue placeholder="Select Month" />
               </SelectTrigger>
               <SelectContent>
@@ -125,34 +127,46 @@ export function AttendanceLogger() {
       </div>
 
       <Card className="bg-primary/5 border-primary/20">
-        <CardContent className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+        <CardContent className="p-4 flex flex-col lg:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
             <Zap className="w-5 h-5 text-primary animate-pulse" />
             <div>
-              <p className="text-sm font-semibold">Bulk Shift Entry</p>
-              <p className="text-xs text-muted-foreground">Set standard hours for all workers with one click.</p>
+              <p className="text-sm font-semibold">Bulk Entry Controls</p>
+              <p className="text-xs text-muted-foreground">Apply standard values to the entire labour list.</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <Select 
-              value={bulkShift} 
-              onValueChange={(val) => setBulkShift(val as any)}
-            >
-              <SelectTrigger className="w-full md:w-[200px] bg-background">
-                <SelectValue placeholder="Select Shift" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="9-hour">9-hour Shift (9.00 hrs)</SelectItem>
-                <SelectItem value="12-hour">12-hour Shift (12.00 hrs)</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Global Date</span>
+              <Input 
+                type="date" 
+                value={bulkDate} 
+                onChange={(e) => setBulkDate(e.target.value)}
+                className="h-9 w-[150px] bg-background border-muted"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase font-bold text-muted-foreground">Global Shift</span>
+              <Select 
+                value={bulkShift} 
+                onValueChange={(val) => setBulkShift(val as any)}
+              >
+                <SelectTrigger className="w-[150px] h-9 bg-background border-muted">
+                  <SelectValue placeholder="Select Shift" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="9-hour">9-hour Shift</SelectItem>
+                  <SelectItem value="12-hour">12-hour Shift</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Button 
               variant="default" 
               size="sm" 
-              className="bg-primary text-primary-foreground"
-              onClick={applyBulkShift}
+              className="bg-primary text-primary-foreground h-9 self-end"
+              onClick={applyBulkSettings}
             >
-              Apply All
+              Apply All Changes
             </Button>
           </div>
         </CardContent>
@@ -162,15 +176,15 @@ export function AttendanceLogger() {
         <Table>
           <TableHeader className="bg-muted/80 text-[10px] uppercase tracking-widest font-bold">
             <TableRow className="border-b border-border">
-              <TableHead className="min-w-[150px] text-foreground">Entry Date</TableHead>
-              <TableHead className="min-w-[200px] text-foreground">Labourer Details</TableHead>
-              <TableHead className="min-w-[150px] text-foreground">Shift Type</TableHead>
-              <TableHead className="min-w-[120px] text-primary">Total Hrs</TableHead>
-              <TableHead className="min-w-[140px] text-green-500">Incentive (+)</TableHead>
-              <TableHead className="min-w-[140px] text-destructive">Weekly Adv (-)</TableHead>
-              <TableHead className="min-w-[140px] text-destructive">Loan (-)</TableHead>
-              <TableHead className="min-w-[120px] text-accent">Net Payout</TableHead>
-              <TableHead className="text-right text-foreground">Action</TableHead>
+              <th className="p-4 min-w-[160px] text-foreground text-left">Manual Entry Date</th>
+              <th className="p-4 min-w-[200px] text-foreground text-left">Labourer Details</th>
+              <th className="p-4 min-w-[150px] text-foreground text-left">Shift Type</th>
+              <th className="p-4 min-w-[120px] text-primary text-left">Total Hrs</th>
+              <th className="p-4 min-w-[140px] text-green-500 text-left">Incentive (+)</th>
+              <th className="p-4 min-w-[140px] text-destructive text-left">Weekly Adv (-)</th>
+              <th className="p-4 min-w-[140px] text-destructive text-left">Loan (-)</th>
+              <th className="p-4 min-w-[120px] text-accent text-left">Net Payout</th>
+              <th className="p-4 text-right text-foreground">Action</th>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -181,20 +195,23 @@ export function AttendanceLogger() {
 
               return (
                 <TableRow key={entry.id} className={cn(
-                  "transition-all border-border h-20 group",
+                  "transition-all border-border h-24 group",
                   isEditing ? "bg-accent/10" : "hover:bg-muted/50"
                 )}>
                   <TableCell>
-                    <Input 
-                      type="date" 
-                      value={entry.date} 
-                      disabled={!isEditing}
-                      className="h-10 bg-background border-muted text-sm font-mono"
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, date: val, isModified: true } : item));
-                      }}
-                    />
+                    <div className="relative">
+                      <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      <Input 
+                        type="date" 
+                        value={entry.date} 
+                        disabled={!isEditing}
+                        className="h-11 pl-8 bg-background border-muted text-sm font-mono font-bold w-[160px]"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, date: val, isModified: true } : item));
+                        }}
+                      />
+                    </div>
                   </TableCell>
                   <TableCell className="py-4">
                     <div className="flex flex-col">
@@ -214,7 +231,7 @@ export function AttendanceLogger() {
                           setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, shift: val, hours: hrs, isModified: true } : item));
                         }}
                       >
-                        <SelectTrigger className="h-10 bg-background border-muted">
+                        <SelectTrigger className="h-11 bg-background border-muted w-[130px]">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -224,7 +241,7 @@ export function AttendanceLogger() {
                       </Select>
                     ) : (
                       <Badge variant="outline" className={cn(
-                        "text-[10px] px-2 py-0.5 font-bold",
+                        "text-[10px] px-3 py-1 font-bold",
                         entry.shift === '12-hour' ? 'text-accent border-accent/40 bg-accent/5' : 'text-primary border-primary/40 bg-primary/5'
                       )}>
                         {entry.shift}
@@ -237,7 +254,7 @@ export function AttendanceLogger() {
                       step="0.5"
                       value={entry.hours} 
                       disabled={!isEditing}
-                      className="h-10 bg-primary/5 border-primary/20 focus-visible:ring-primary font-mono text-base font-bold text-primary w-24"
+                      className="h-11 bg-primary/5 border-primary/20 focus-visible:ring-primary font-mono text-base font-bold text-primary w-24"
                       onChange={(e) => {
                         const val = parseFloat(e.target.value) || 0;
                         setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, hours: val, isModified: true } : item));
@@ -251,7 +268,7 @@ export function AttendanceLogger() {
                         type="number"
                         value={entry.incentive} 
                         disabled={!isEditing}
-                        className="h-10 pl-6 bg-green-500/5 border-green-500/20 focus-visible:ring-green-500 font-mono text-base font-bold text-green-500 w-28"
+                        className="h-11 pl-6 bg-green-500/5 border-green-500/20 focus-visible:ring-green-500 font-mono text-base font-bold text-green-500 w-32"
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
                           setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, incentive: val, isModified: true } : item));
@@ -266,7 +283,7 @@ export function AttendanceLogger() {
                         type="number"
                         value={entry.weeklyAdvance} 
                         disabled={!isEditing}
-                        className="h-10 pl-6 bg-destructive/5 border-destructive/20 focus-visible:ring-destructive font-mono text-base font-bold text-destructive w-28"
+                        className="h-11 pl-6 bg-destructive/5 border-destructive/20 focus-visible:ring-destructive font-mono text-base font-bold text-destructive w-32"
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
                           setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, weeklyAdvance: val, isModified: true } : item));
@@ -281,7 +298,7 @@ export function AttendanceLogger() {
                         type="number"
                         value={entry.loan} 
                         disabled={!isEditing}
-                        className="h-10 pl-6 bg-destructive/5 border-destructive/20 focus-visible:ring-destructive font-mono text-base font-bold text-destructive w-28"
+                        className="h-11 pl-6 bg-destructive/5 border-destructive/20 focus-visible:ring-destructive font-mono text-base font-bold text-destructive w-32"
                         onChange={(e) => {
                           const val = parseFloat(e.target.value) || 0;
                           setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, loan: val, isModified: true } : item));
