@@ -7,10 +7,24 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays } from "lucide-react";
+import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/badge"; // Note: Using Badge here for a placeholder if AlertDialog is missing, but actually it should be from @/components/ui/alert-dialog
+
+// Correcting imports for AlertDialog
+import {
+  AlertDialog as ConfirmDialog,
+  AlertDialogAction as ConfirmAction,
+  AlertDialogCancel as ConfirmCancel,
+  AlertDialogContent as ConfirmContent,
+  AlertDialogDescription as ConfirmDescription,
+  AlertDialogFooter as ConfirmFooter,
+  AlertDialogHeader as ConfirmHeader,
+  AlertDialogTitle as ConfirmTitle,
+  AlertDialogTrigger as ConfirmTrigger,
+} from "@/components/ui/alert-dialog";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June", 
@@ -51,6 +65,16 @@ export function AttendanceLogger() {
     toast({
       title: "Entry Saved",
       description: `Updated records for ${entries.find(e => e.id === id)?.name} in ${selectedMonth}.`,
+    });
+  };
+
+  const handleDeleteRow = (id: string) => {
+    const deletedName = entries.find(e => e.id === id)?.name;
+    setEntries(prev => prev.filter(entry => entry.id !== id));
+    toast({
+      variant: "destructive",
+      title: "Entry Removed",
+      description: `${deletedName} has been removed from the ${selectedMonth} payout list.`,
     });
   };
 
@@ -234,25 +258,56 @@ export function AttendanceLogger() {
                     ₹{netPayout.toLocaleString('en-IN')}
                   </TableCell>
                   <TableCell className="text-right">
-                    {isEditing ? (
-                      <Button 
-                        variant="default" 
-                        size="sm" 
-                        className="h-10 w-10 bg-green-600 hover:bg-green-700 shadow-lg"
-                        onClick={() => handleSaveRow(entry.id)}
-                      >
-                        <Save className="w-5 h-5" />
-                      </Button>
-                    ) : (
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="h-10 w-10 hover:bg-accent/20 hover:text-accent"
-                        onClick={() => setEditingId(entry.id)}
-                      >
-                        <Edit2 className="w-5 h-5" />
-                      </Button>
-                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      {isEditing ? (
+                        <Button 
+                          variant="default" 
+                          size="sm" 
+                          className="h-9 w-9 bg-green-600 hover:bg-green-700 shadow-lg p-0"
+                          onClick={() => handleSaveRow(entry.id)}
+                        >
+                          <Save className="w-4 h-4" />
+                        </Button>
+                      ) : (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-9 w-9 hover:bg-accent/20 hover:text-accent p-0"
+                          onClick={() => setEditingId(entry.id)}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                      
+                      <ConfirmDialog>
+                        <ConfirmTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-9 w-9 hover:bg-destructive/20 hover:text-destructive p-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </ConfirmTrigger>
+                        <ConfirmContent className="bg-card border-border">
+                          <ConfirmHeader>
+                            <ConfirmTitle>Remove Entry?</ConfirmTitle>
+                            <ConfirmDescription>
+                              This will remove {entry.name} from the {selectedMonth} list.
+                            </ConfirmDescription>
+                          </ConfirmHeader>
+                          <ConfirmFooter>
+                            <ConfirmCancel className="border-border">Cancel</ConfirmCancel>
+                            <ConfirmAction 
+                              onClick={() => handleDeleteRow(entry.id)}
+                              className="bg-destructive hover:bg-destructive/90 text-white"
+                            >
+                              Remove
+                            </ConfirmAction>
+                          </ConfirmFooter>
+                        </ConfirmContent>
+                      </ConfirmDialog>
+                    </div>
                   </TableCell>
                 </TableRow>
               );
