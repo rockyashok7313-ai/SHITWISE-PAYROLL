@@ -1,17 +1,18 @@
-
 "use client"
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const monthlyTrendData = [
   { month: "Jan", cost: 125000 },
@@ -35,13 +36,58 @@ const MONTHS = [
 
 export function PayrollReports() {
   const { toast } = useToast();
+  const reportRef = useRef<HTMLDivElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [reportData, setReportData] = useState<any[] | null>(null);
   const [selectedEmployeeForSlip, setSelectedEmployeeForSlip] = useState<any>(null);
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!reportRef.current) return;
+    
+    setIsDownloading(true);
+    try {
+      const element = reportRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff"
+      });
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      
+      const fileName = selectedEmployeeForSlip 
+        ? `Payslip_${selectedEmployeeForSlip.id}_${selectedMonth}.pdf`
+        : `Payroll_Report_${selectedMonth}_2024.pdf`;
+        
+      pdf.save(fileName);
+      
+      toast({
+        title: "PDF Downloaded",
+        description: `${fileName} has been saved to your device.`,
+      });
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+      toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: "Could not generate PDF. Please try the Print option.",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const generateMonthlyReport = () => {
@@ -102,21 +148,37 @@ export function PayrollReports() {
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="border-border hover:bg-accent/5">
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="border-border hover:bg-accent/5"
+            onClick={handleDownloadPDF}
+            disabled={!reportData || isDownloading}
+          >
+            {isDownloading ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <FileDown className="w-4 h-4 mr-2" />
+            )}
+            Download PDF
           </Button>
-          <Button variant="default" size="sm" onClick={handlePrint} className="bg-primary hover:bg-primary/90">
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={handlePrint} 
+            className="bg-primary hover:bg-primary/90"
+            disabled={!reportData}
+          >
             <Printer className="w-4 h-4 mr-2" />
-            Print Current View
+            Print View
           </Button>
         </div>
       </div>
 
       {/* Printable Area */}
-      <div className="printable-area space-y-8">
+      <div className="printable-area space-y-8" ref={reportRef}>
         {/* Month-Wise Summary Table */}
-        {reportData && (
+        {reportData && !selectedEmployeeForSlip && (
           <Card className="bg-card border-border shadow-xl">
             <CardHeader className="border-b border-border/50">
               <div className="flex justify-between items-end">
@@ -175,39 +237,10 @@ export function PayrollReports() {
           </Card>
         )}
 
-        {/* Employee-Wise Payslip Generator */}
-        {reportData && (
-          <div className="no-print space-y-4">
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-accent" />
-              <h4 className="font-headline font-bold text-lg">Generate Individual Payslips</h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {reportData.map((emp) => (
-                <Button 
-                  key={emp.id} 
-                  variant="outline" 
-                  className={cn(
-                    "justify-between h-14 border-border hover:border-accent group",
-                    selectedEmployeeForSlip?.id === emp.id && "bg-accent/10 border-accent"
-                  )}
-                  onClick={() => setSelectedEmployeeForSlip(emp)}
-                >
-                  <div className="flex flex-col items-start overflow-hidden">
-                    <span className="font-bold text-sm truncate w-full">{emp.name}</span>
-                    <span className="text-[10px] text-muted-foreground uppercase">{emp.id}</span>
-                  </div>
-                  <FileText className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* The Actual Printable Payslip */}
         {selectedEmployeeForSlip && (
-          <div className="printable-payslip mt-8 bg-white text-black p-8 border-2 border-black rounded-sm shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 bg-black text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest">
+          <div className="printable-payslip bg-white text-black p-8 border-2 border-black rounded-sm shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-black text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest no-print-force">
               Private & Confidential
             </div>
             
@@ -222,7 +255,7 @@ export function PayrollReports() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-8 mb-8">
+            <div className="grid grid-cols-2 gap-8 mb-8 text-left">
               <div className="space-y-1">
                 <div className="text-[10px] uppercase font-bold text-gray-500">Employee Details</div>
                 <div className="text-lg font-bold">{selectedEmployeeForSlip.name}</div>
@@ -274,10 +307,42 @@ export function PayrollReports() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Navigation Controls - Always Hidden in Printable View */}
+      <div className="no-print space-y-8">
+        {/* Employee-Wise Payslip Selection */}
+        {reportData && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5 text-accent" />
+              <h4 className="font-headline font-bold text-lg">Generate Individual Payslips</h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {reportData.map((emp) => (
+                <Button 
+                  key={emp.id} 
+                  variant="outline" 
+                  className={cn(
+                    "justify-between h-14 border-border hover:border-accent group",
+                    selectedEmployeeForSlip?.id === emp.id && "bg-accent/10 border-accent"
+                  )}
+                  onClick={() => setSelectedEmployeeForSlip(emp)}
+                >
+                  <div className="flex flex-col items-start overflow-hidden text-left">
+                    <span className="font-bold text-sm truncate w-full">{emp.name}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase">{emp.id}</span>
+                  </div>
+                  <FileText className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Statutory Trend Chart */}
         {!selectedEmployeeForSlip && (
-          <Card className="bg-card/30 border-border no-print">
+          <Card className="bg-card/30 border-border">
             <CardHeader>
               <CardTitle className="font-headline flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-accent" />
@@ -322,39 +387,39 @@ export function PayrollReports() {
             </CardContent>
           </Card>
         )}
-      </div>
 
-      {/* Bonus Calculator Tool - Hidden during individual slip view */}
-      {!selectedEmployeeForSlip && (
-        <Card className="bg-gradient-to-br from-card to-muted/30 border-primary/20 no-print">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div className="space-y-1">
-              <CardTitle className="font-headline text-xl flex items-center gap-2">
-                <Gift className="w-6 h-6 text-accent" />
-                Yearly Bonus Calculator
-              </CardTitle>
-              <CardDescription>Compute 8.33% statutory bonus based on 12-month earnings.</CardDescription>
-            </div>
-            <Button 
-              variant="default" 
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
-              onClick={() => toast({ title: "Calculator Running", description: "Processing historical payroll files..."})}
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Calculate Yearly Bonus
+        {/* Bonus Calculator Tool */}
+        {!selectedEmployeeForSlip && (
+          <Card className="bg-gradient-to-br from-card to-muted/30 border-primary/20">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle className="font-headline text-xl flex items-center gap-2">
+                  <Gift className="w-6 h-6 text-accent" />
+                  Yearly Bonus Calculator
+                </CardTitle>
+                <CardDescription>Compute 8.33% statutory bonus based on 12-month earnings.</CardDescription>
+              </div>
+              <Button 
+                variant="default" 
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+                onClick={() => toast({ title: "Calculator Running", description: "Processing historical payroll files..."})}
+              >
+                <Sparkles className="w-4 h-4 mr-2" />
+                Calculate Yearly Bonus
+              </Button>
+            </CardHeader>
+          </Card>
+        )}
+
+        {/* Payslip Clear Action */}
+        {selectedEmployeeForSlip && (
+          <div className="flex justify-center py-4">
+            <Button variant="ghost" onClick={() => setSelectedEmployeeForSlip(null)} className="text-muted-foreground hover:text-foreground">
+              Back to Monthly Summary
             </Button>
-          </CardHeader>
-        </Card>
-      )}
-
-      {/* Payslip Clear Action */}
-      {selectedEmployeeForSlip && (
-        <div className="no-print flex justify-center py-4">
-          <Button variant="ghost" onClick={() => setSelectedEmployeeForSlip(null)} className="text-muted-foreground hover:text-foreground">
-            Back to Monthly Summary
-          </Button>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
