@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Factory, Clock, IndianRupee, ShieldCheck } from "lucide-react";
+import { Save, Factory, Clock, IndianRupee, ShieldCheck, CalendarRange } from "lucide-react";
 
 export function FactorySettings() {
   const { toast } = useToast();
@@ -18,12 +18,13 @@ export function FactorySettings() {
     factoryShiftHours: 12,
     defaultIncentive: 100,
     currency: "INR",
+    financialYear: "2024-25",
   });
 
   const handleSave = () => {
     toast({
       title: "Settings Updated",
-      description: "Factory configuration has been saved successfully.",
+      description: `Factory configuration for FY ${config.financialYear} has been saved successfully.`,
     });
   };
 
@@ -58,6 +59,36 @@ export function FactorySettings() {
                     onChange={(e) => setConfig({...config, factoryUnit: e.target.value})}
                     className="bg-background border-muted" 
                   />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/30 border-border">
+            <CardHeader>
+              <CardTitle className="font-headline flex items-center gap-2">
+                <CalendarRange className="w-5 h-5 text-accent" />
+                Reporting Period
+              </CardTitle>
+              <CardDescription>Configure the active Financial Year for statutory tracking.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="fy">Active Financial Year</Label>
+                  <Select 
+                    value={config.financialYear} 
+                    onValueChange={(val) => setConfig({...config, financialYear: val})}
+                  >
+                    <SelectTrigger id="fy" className="bg-background border-muted">
+                      <SelectValue placeholder="Select FY" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2023-24">FY 2023-24 (Apr-Mar)</SelectItem>
+                      <SelectItem value="2024-25">FY 2024-25 (Apr-Mar)</SelectItem>
+                      <SelectItem value="2025-26">FY 2025-26 (Apr-Mar)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -142,7 +173,7 @@ export function FactorySettings() {
                 <span className="text-xs font-medium">Compliance Verified</span>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Changes to Shift Definitions will reflect in all new attendance logs. Historical records remain unchanged.
+                Updating the Financial Year affects statutory reports, bonus calculations, and seasonal trend analysis.
               </p>
               <Button onClick={handleSave} className="w-full bg-primary hover:bg-primary/90">
                 <Save className="w-4 h-4 mr-2" />
