@@ -21,9 +21,8 @@ export function EmployeeProfiles() {
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   
   // Calculator state
-  const [calcMode, setCalcMode] = useState<'monthly-to-hourly' | 'hourly-to-monthly'>('monthly-to-hourly');
+  const [calcMode, setCalcMode] = useState<'day-to-hourly' | 'hourly-to-day'>('hourly-to-day');
   const [calcInput, setCalcInput] = useState<string>("");
-  const [calcDays, setCalcDays] = useState<number>(26); // Standard Indian manufacturing month
 
   const handleUpdate = () => {
     setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? editingEmployee : emp));
@@ -41,22 +40,19 @@ export function EmployeeProfiles() {
 
     const shiftHours = editingEmployee.shift === '12-hour' ? 12 : 9;
     
-    if (calcMode === 'monthly-to-hourly') {
-      const perDay = inputVal / calcDays;
-      const perHour = Math.round(perDay / shiftHours);
+    if (calcMode === 'day-to-hourly') {
+      const perHour = Math.round(inputVal / shiftHours);
       setEditingEmployee({ ...editingEmployee, rate: perHour });
       toast({
         title: "Rates Applied",
-        description: `Target Monthly ₹${inputVal} → ₹${perHour}/hr (based on ${calcDays} days).`,
+        description: `Daily ₹${inputVal} → ₹${perHour}/hr (based on ${shiftHours}h shift).`,
       });
     } else {
-      // HOURLY TO MONTHLY/DAYS Logic
-      const perDay = inputVal * shiftHours;
-      const monthly = Math.round(perDay * calcDays);
+      const perDay = Math.round(inputVal * shiftHours);
       setEditingEmployee({ ...editingEmployee, rate: inputVal });
       toast({
-        title: "Rates Calculated",
-        description: `₹${inputVal}/hr → ₹${perDay} per day and approx ₹${monthly} per month (${calcDays} days).`,
+        title: "Rates Applied",
+        description: `₹${inputVal}/hr → ₹${perDay} per day (based on ${shiftHours}h shift).`,
       });
     }
   };
@@ -119,8 +115,8 @@ export function EmployeeProfiles() {
                         </Badge>
                       </TableCell>
                       <TableCell className="font-mono text-sm">₹{emp.rate}</TableCell>
-                      <TableCell className="font-mono text-sm text-primary">₹{perDay}</TableCell>
-                      <TableCell className="font-mono text-sm text-accent font-bold">₹{monthly.toLocaleString('en-IN')}</TableCell>
+                      <TableCell className="font-mono text-sm text-primary font-bold">₹{perDay}</TableCell>
+                      <TableCell className="font-mono text-sm text-accent">₹{monthly.toLocaleString('en-IN')}</TableCell>
                       <TableCell className="text-right">
                         <Dialog>
                           <DialogTrigger asChild>
@@ -148,7 +144,7 @@ export function EmployeeProfiles() {
                                 <TabsTrigger value="details">Basic Info</TabsTrigger>
                                 <TabsTrigger value="calculator" className="flex items-center gap-2">
                                   <Calculator className="w-4 h-4" />
-                                  Salary Tool
+                                  Wage Tool
                                 </TabsTrigger>
                               </TabsList>
                               
@@ -196,50 +192,49 @@ export function EmployeeProfiles() {
                                   <div className="flex items-center justify-between mb-2">
                                     <p className="text-[10px] text-accent uppercase font-bold flex items-center gap-1">
                                       <Calculator className="w-3 h-3" />
-                                      Wage Entry Tool
+                                      Hourly/Day Wage Tool
                                     </p>
                                     <Button 
                                       variant="ghost" 
                                       size="icon" 
                                       className="h-6 w-6"
-                                      onClick={() => setCalcMode(prev => prev === 'monthly-to-hourly' ? 'hourly-to-monthly' : 'monthly-to-hourly')}
+                                      onClick={() => setCalcMode(prev => prev === 'hourly-to-day' ? 'day-to-hourly' : 'hourly-to-day')}
                                     >
                                       <ArrowRightLeft className="w-3 h-3 text-muted-foreground" />
                                     </Button>
                                   </div>
                                   <p className="text-xs text-muted-foreground">
-                                    {calcMode === 'monthly-to-hourly' 
-                                      ? "Convert a target monthly salary into the required hourly rate." 
-                                      : "Project a monthly salary based on a fixed hourly rate."}
+                                    {calcMode === 'hourly-to-day' 
+                                      ? "Calculate Per Day Salary based on Hourly Rate." 
+                                      : "Calculate Hourly Rate based on Per Day Salary."}
                                   </p>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                   <Label className="text-right text-xs">
-                                    {calcMode === 'monthly-to-hourly' ? "Monthly Target" : "Hourly Rate"}
+                                    {calcMode === 'hourly-to-day' ? "Hourly Rate" : "Per Day Salary"}
                                   </Label>
                                   <div className="col-span-3 relative">
                                     <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                                     <Input 
                                       type="number" 
-                                      placeholder={calcMode === 'monthly-to-hourly' ? "e.g. 15000" : "e.g. 450"} 
+                                      placeholder={calcMode === 'hourly-to-day' ? "e.g. 45" : "e.g. 500"} 
                                       value={calcInput}
                                       onChange={(e) => setCalcInput(e.target.value)}
                                       className="pl-8 bg-background border-muted"
                                     />
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right text-xs">Working Days</Label>
-                                  <Input 
-                                    type="number" 
-                                    value={calcDays}
-                                    onChange={(e) => setCalcDays(Number(e.target.value))}
-                                    className="col-span-3 bg-background border-muted"
-                                  />
+                                
+                                <div className="p-3 bg-muted/10 rounded-md">
+                                  <div className="flex justify-between items-center text-xs">
+                                    <span className="text-muted-foreground">Assigned Shift:</span>
+                                    <span className="font-bold">{editingEmployee?.shift}</span>
+                                  </div>
                                 </div>
+
                                 <div className="flex justify-end pt-2">
                                   <Button size="sm" variant="secondary" onClick={calculateRates}>
-                                    {calcMode === 'monthly-to-hourly' ? "Apply Hourly Rate" : "Calculate Projection"}
+                                    Apply Calculation
                                   </Button>
                                 </div>
                               </TabsContent>

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Save, Download, Edit2, Zap, IndianRupee, Calculator, Wallet } from "lucide-react";
+import { Save, Download, Edit2, Zap, IndianRupee, Calculator, Wallet, Coins } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,7 @@ export function AttendanceLogger() {
     ...emp,
     shift: emp.shift as '9-hour' | '12-hour',
     hours: emp.shift === '12-hour' ? 12 : 9,
+    incentive: 0,
     weeklyAdvance: 0,
     loan: 0,
     isModified: false
@@ -109,16 +110,17 @@ export function AttendanceLogger() {
         </CardContent>
       </Card>
 
-      <div className="rounded-md border border-border bg-card/30 overflow-hidden">
+      <div className="rounded-md border border-border bg-card/30 overflow-hidden overflow-x-auto">
         <Table>
           <TableHeader className="bg-muted/50 text-[10px] uppercase tracking-wider">
             <TableRow>
-              <TableHead className="w-[180px]">Labourer</TableHead>
-              <TableHead>Shift Type</TableHead>
-              <TableHead className="w-[100px]">Total Hrs</TableHead>
-              <TableHead>Per Day Wage</TableHead>
-              <TableHead className="w-[130px]">Weekly Adv (-)</TableHead>
-              <TableHead className="w-[130px]">Loan (-)</TableHead>
+              <TableHead className="min-w-[180px]">Labourer</TableHead>
+              <TableHead>Shift</TableHead>
+              <TableHead className="min-w-[80px]">Total Hrs</TableHead>
+              <TableHead>Per Day Sal</TableHead>
+              <TableHead className="min-w-[120px]">Incentive (+)</TableHead>
+              <TableHead className="min-w-[120px]">Weekly Adv (-)</TableHead>
+              <TableHead className="min-w-[120px]">Loan (-)</TableHead>
               <TableHead>Net Payout</TableHead>
               <TableHead className="text-right">Action</TableHead>
             </TableRow>
@@ -126,7 +128,7 @@ export function AttendanceLogger() {
           <TableBody>
             {entries.map((entry) => {
               const grossWage = entry.hours * entry.rate;
-              const netPayout = grossWage - entry.weeklyAdvance - entry.loan;
+              const netPayout = grossWage + entry.incentive - entry.weeklyAdvance - entry.loan;
               const isEditing = editingId === entry.id;
 
               return (
@@ -165,9 +167,21 @@ export function AttendanceLogger() {
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-col">
-                      <span className="text-xs text-muted-foreground line-through opacity-50">₹{(entry.rate * (entry.shift === '12-hour' ? 12 : 9))}</span>
-                      <span className="font-bold text-foreground">₹{grossWage.toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-foreground">₹{grossWage.toLocaleString('en-IN')}</span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]">₹</span>
+                      <Input 
+                        type="number"
+                        value={entry.incentive} 
+                        disabled={!isEditing}
+                        className="h-8 pl-5 bg-background/50 border-muted focus-visible:ring-accent font-mono text-sm text-green-500"
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, incentive: val, isModified: true } : item));
+                        }}
+                      />
                     </div>
                   </TableCell>
                   <TableCell>
@@ -231,25 +245,32 @@ export function AttendanceLogger() {
         </Table>
       </div>
 
-      <div className="p-4 bg-muted/20 border border-border rounded-lg flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="p-4 bg-muted/20 border border-border rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-6">
           <div className="flex flex-col">
-            <span className="text-[10px] text-muted-foreground uppercase">Total Daily Liability</span>
+            <span className="text-[10px] text-muted-foreground uppercase">Net Daily Liability</span>
             <span className="text-xl font-headline font-bold text-primary">
-              ₹{entries.reduce((acc, curr) => acc + (curr.hours * curr.rate - curr.weeklyAdvance - curr.loan), 0).toLocaleString('en-IN')}
+              ₹{entries.reduce((acc, curr) => acc + (curr.hours * curr.rate + curr.incentive - curr.weeklyAdvance - curr.loan), 0).toLocaleString('en-IN')}
             </span>
           </div>
-          <div className="w-px h-8 bg-border" />
+          <div className="w-px h-8 bg-border hidden sm:block" />
           <div className="flex flex-col">
-            <span className="text-[10px] text-muted-foreground uppercase">Total Advance Deductions</span>
+            <span className="text-[10px] text-muted-foreground uppercase">Total Incentives</span>
+            <span className="text-xl font-headline font-bold text-green-500">
+              ₹{entries.reduce((acc, curr) => acc + curr.incentive, 0).toLocaleString('en-IN')}
+            </span>
+          </div>
+          <div className="w-px h-8 bg-border hidden sm:block" />
+          <div className="flex flex-col">
+            <span className="text-[10px] text-muted-foreground uppercase">Total Deductions</span>
             <span className="text-xl font-headline font-bold text-destructive">
               ₹{entries.reduce((acc, curr) => acc + curr.weeklyAdvance + curr.loan, 0).toLocaleString('en-IN')}
             </span>
           </div>
         </div>
         <div className="flex items-center gap-2 text-accent">
-          <Wallet className="w-5 h-5" />
-          <span className="text-xs font-semibold uppercase tracking-wider">Payroll Summary</span>
+          <Coins className="w-5 h-5" />
+          <span className="text-xs font-semibold uppercase tracking-wider">Financial Overview</span>
         </div>
       </div>
     </div>
