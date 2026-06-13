@@ -11,7 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-export type TabValue = "dashboard" | "attendance" | "employees" | "audit" | "reports";
+export type TabValue = "dashboard" | "attendance" | "employees" | "audit" | "reports" | "settings";
 
 const NAV_ITEMS: { label: string; icon: any; value: TabValue }[] = [
   { label: "Dashboard", icon: LayoutDashboard, value: "dashboard" },
@@ -58,7 +58,16 @@ export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
       </div>
 
       <div className="p-4 border-t border-border">
-        <Button variant="ghost" className="w-full justify-start gap-3 h-11 text-muted-foreground">
+        <Button 
+          variant="ghost" 
+          onClick={() => onTabChange("settings")}
+          className={cn(
+            "w-full justify-start gap-3 h-11 transition-all",
+            activeTab === "settings" 
+              ? "bg-primary/10 text-primary border-r-2 border-primary rounded-r-none" 
+              : "text-muted-foreground hover:bg-accent/5 hover:text-foreground"
+          )}
+        >
           <Settings className="w-4 h-4" />
           <span className="text-sm font-medium">Settings</span>
         </Button>

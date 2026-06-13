@@ -7,11 +7,12 @@ import { AttendanceLogger } from "@/components/dashboard/attendance-logger";
 import { PayrollAuditTool } from "@/components/payroll/audit-tool";
 import { EmployeeProfiles } from "@/components/dashboard/employee-profiles";
 import { PayrollReports } from "@/components/payroll/payroll-reports";
+import { FactorySettings } from "@/components/settings/factory-settings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Clock, ShieldCheck, History, Users, FileSpreadsheet, LayoutDashboard } from "lucide-react";
+import { Clock, ShieldCheck, History, Users, FileSpreadsheet, LayoutDashboard, Settings } from "lucide-react";
 import { ATTENDANCE_RECORDS } from "@/lib/mock-data";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -30,6 +31,7 @@ export default function Home() {
             {activeTab === 'employees' && "Staff Management"}
             {activeTab === 'audit' && "Payroll Intelligence"}
             {activeTab === 'reports' && "Financial Reporting"}
+            {activeTab === 'settings' && "Factory Configuration"}
           </h2>
           <p className="text-muted-foreground">Precision shift management and payroll tracking system for India operations.</p>
         </header>
@@ -55,6 +57,10 @@ export default function Home() {
             <TabsTrigger value="reports" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <FileSpreadsheet className="w-4 h-4" />
               Reports
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Settings className="w-4 h-4" />
+              Settings
             </TabsTrigger>
           </TabsList>
 
@@ -131,6 +137,10 @@ export default function Home() {
 
           <TabsContent value="reports" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
             <PayrollReports />
+          </TabsContent>
+
+          <TabsContent value="settings" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
+            <FactorySettings />
           </TabsContent>
         </Tabs>
       </main>
