@@ -6,21 +6,27 @@ import {
   Clock, 
   ShieldCheck, 
   FileSpreadsheet, 
-  Settings,
-  ChevronLeft
+  Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const NAV_ITEMS = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true },
-  { label: "Attendance Grid", icon: Clock, active: false },
-  { label: "Employee Profiles", icon: Users, active: false },
-  { label: "Audit Assistant", icon: ShieldCheck, active: false },
-  { label: "Payroll Reports", icon: FileSpreadsheet, active: false },
+export type TabValue = "dashboard" | "attendance" | "employees" | "audit" | "reports";
+
+const NAV_ITEMS: { label: string; icon: any; value: TabValue }[] = [
+  { label: "Dashboard", icon: LayoutDashboard, value: "dashboard" },
+  { label: "Attendance Grid", icon: Clock, value: "attendance" },
+  { label: "Employee Profiles", icon: Users, value: "employees" },
+  { label: "Audit Assistant", icon: ShieldCheck, value: "audit" },
+  { label: "Payroll Reports", icon: FileSpreadsheet, value: "reports" },
 ];
 
-export function SidebarNav() {
+interface SidebarNavProps {
+  activeTab: TabValue;
+  onTabChange: (value: TabValue) => void;
+}
+
+export function SidebarNav({ activeTab, onTabChange }: SidebarNavProps) {
   return (
     <div className="w-64 border-r border-border bg-sidebar h-screen flex flex-col sticky top-0">
       <div className="p-6 border-b border-border">
@@ -33,13 +39,14 @@ export function SidebarNav() {
       </div>
       
       <div className="flex-1 p-4 space-y-1">
-        {NAV_ITEMS.map((item, i) => (
+        {NAV_ITEMS.map((item) => (
           <Button
-            key={i}
+            key={item.value}
             variant="ghost"
+            onClick={() => onTabChange(item.value)}
             className={cn(
               "w-full justify-start gap-3 h-11 transition-all",
-              item.active 
+              activeTab === item.value 
                 ? "bg-primary/10 text-primary border-r-2 border-primary rounded-r-none" 
                 : "text-muted-foreground hover:bg-accent/5 hover:text-foreground"
             )}
