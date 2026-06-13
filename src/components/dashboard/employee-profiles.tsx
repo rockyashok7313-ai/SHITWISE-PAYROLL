@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EMPLOYEES as INITIAL_EMPLOYEES } from "@/lib/mock-data";
-import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2 } from "lucide-react";
+import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Upload, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ export function EmployeeProfiles() {
   const { toast } = useToast();
   const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Calculator state
   const [calcMode, setCalcMode] = useState<'day-to-hourly' | 'hourly-to-day'>('hourly-to-day');
@@ -52,6 +53,17 @@ export function EmployeeProfiles() {
       title: "Employee Deleted",
       description: `${deletedName} has been permanently removed from the directory.`,
     });
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setEditingEmployee({ ...editingEmployee, photoUrl: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const calculateRates = () => {
@@ -115,9 +127,13 @@ export function EmployeeProfiles() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-8 w-8 border border-primary/20">
-                            <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                              {emp.name.split(' ').map(n => n[0]).join('')}
-                            </AvatarFallback>
+                            {emp.photoUrl ? (
+                              <AvatarImage src={emp.photoUrl} alt={emp.name} />
+                            ) : (
+                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                {emp.name.split(' ').map(n => n[0]).join('')}
+                              </AvatarFallback>
+                            )}
                           </Avatar>
                           <div className="flex flex-col text-xs sm:text-sm">
                             <span className="font-semibold">{emp.name}</span>
@@ -155,15 +171,45 @@ export function EmployeeProfiles() {
                                 Edit
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="sm:max-w-[500px] bg-card border-border">
+                            <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[90vh] overflow-y-auto">
                               <DialogHeader>
                                 <DialogTitle className="font-headline">Edit Profile: {editingEmployee?.name}</DialogTitle>
-                                <DialogDescription>Update labor details and calculate specific wage rates.</DialogDescription>
+                                <DialogDescription>Update labor details, contact info, and bank records.</DialogDescription>
                               </DialogHeader>
                               
-                              <Tabs defaultValue="details" className="mt-4">
-                                <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+                              <div className="flex justify-center py-6">
+                                <div className="relative">
+                                  <Avatar className="h-24 w-24 border-2 border-primary/20">
+                                    {editingEmployee?.photoUrl ? (
+                                      <AvatarImage src={editingEmployee.photoUrl} />
+                                    ) : (
+                                      <AvatarFallback className="bg-muted text-2xl font-bold">
+                                        {editingEmployee?.name?.split(' ').map((n: string) => n[0]).join('')}
+                                      </AvatarFallback>
+                                    )}
+                                  </Avatar>
+                                  <Button
+                                    size="icon"
+                                    variant="secondary"
+                                    className="absolute bottom-0 right-0 rounded-full h-8 w-8 shadow-lg border border-border"
+                                    onClick={() => fileInputRef.current?.click()}
+                                  >
+                                    <Camera className="h-4 w-4" />
+                                  </Button>
+                                  <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={handlePhotoUpload}
+                                  />
+                                </div>
+                              </div>
+
+                              <Tabs defaultValue="details" className="mt-0">
+                                <TabsList className="grid w-full grid-cols-3 bg-muted/50">
                                   <TabsTrigger value="details">Basic Info</TabsTrigger>
+                                  <TabsTrigger value="bank">Bank & Contact</TabsTrigger>
                                   <TabsTrigger value="calculator" className="flex items-center gap-2">
                                     <Calculator className="w-4 h-4" />
                                     Wage Tool
@@ -220,6 +266,58 @@ export function EmployeeProfiles() {
                                         </SelectContent>
                                       </Select>
                                     </div>
+                                  </div>
+                                </TabsContent>
+
+                                <TabsContent value="bank" className="space-y-4 py-4">
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="mobile" className="text-right text-xs flex items-center justify-end gap-1">
+                                      <Phone className="w-3 h-3" />
+                                      Mobile
+                                    </Label>
+                                    <Input 
+                                      id="mobile" 
+                                      value={editingEmployee?.mobile || ""} 
+                                      placeholder="10-digit number"
+                                      onChange={(e) => setEditingEmployee({ ...editingEmployee, mobile: e.target.value })}
+                                      className="col-span-3 bg-background border-muted" 
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="bankName" className="text-right text-xs flex items-center justify-end gap-1">
+                                      <Landmark className="w-3 h-3" />
+                                      Bank
+                                    </Label>
+                                    <Input 
+                                      id="bankName" 
+                                      value={editingEmployee?.bankName || ""} 
+                                      placeholder="Bank Name"
+                                      onChange={(e) => setEditingEmployee({ ...editingEmployee, bankName: e.target.value })}
+                                      className="col-span-3 bg-background border-muted" 
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="accNo" className="text-right text-xs flex items-center justify-end gap-1">
+                                      <CreditCard className="w-3 h-3" />
+                                      Acc No.
+                                    </Label>
+                                    <Input 
+                                      id="accNo" 
+                                      value={editingEmployee?.accountNumber || ""} 
+                                      placeholder="Account Number"
+                                      onChange={(e) => setEditingEmployee({ ...editingEmployee, accountNumber: e.target.value })}
+                                      className="col-span-3 bg-background border-muted font-mono" 
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="ifsc" className="text-right text-xs">IFSC</Label>
+                                    <Input 
+                                      id="ifsc" 
+                                      value={editingEmployee?.ifscCode || ""} 
+                                      placeholder="IFSC Code"
+                                      onChange={(e) => setEditingEmployee({ ...editingEmployee, ifscCode: e.target.value.toUpperCase() })}
+                                      className="col-span-3 bg-background border-muted font-mono" 
+                                    />
                                   </div>
                                 </TabsContent>
 
