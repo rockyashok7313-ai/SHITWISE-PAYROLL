@@ -33,10 +33,13 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+const YEARS = ["2023", "2024", "2025", "2026", "2027"];
+
 export function PayrollReports() {
   const { toast } = useToast();
   const reportRef = useRef<HTMLDivElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
+  const [selectedYear, setSelectedYear] = useState<string>("2024");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
@@ -69,7 +72,7 @@ export function PayrollReports() {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Payroll Summary");
       
-      const fileName = `Payroll_Report_${selectedMonth}_2024.xlsx`;
+      const fileName = `Payroll_Report_${selectedMonth}_${selectedYear}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
       toast({
@@ -113,8 +116,8 @@ export function PayrollReports() {
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       
       const fileName = selectedEmployeeForSlip 
-        ? `Payslip_${selectedEmployeeForSlip.id}_${selectedMonth}.pdf`
-        : `Payroll_Report_${selectedMonth}_2024.pdf`;
+        ? `Payslip_${selectedEmployeeForSlip.id}_${selectedMonth}_${selectedYear}.pdf`
+        : `Payroll_Report_${selectedMonth}_${selectedYear}.pdf`;
         
       pdf.save(fileName);
       
@@ -156,7 +159,7 @@ export function PayrollReports() {
       setIsGenerating(false);
       toast({
         title: "Report Generated",
-        description: `Salary summary for ${selectedMonth} 2024 is ready.`,
+        description: `Salary summary for ${selectedMonth} ${selectedYear} is ready.`,
       });
     }, 1000);
   };
@@ -164,26 +167,38 @@ export function PayrollReports() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print bg-card/30 p-4 border border-border rounded-xl">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <CalendarDays className="w-5 h-5 text-primary" />
           <div className="flex flex-col">
             <span className="text-xs font-bold uppercase text-muted-foreground">Select Reporting Period</span>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[180px] bg-background">
-                <SelectValue placeholder="Select Month" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map(m => (
-                  <SelectItem key={m} value={m}>{m} 2024</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex gap-2">
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[140px] bg-background">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[100px] bg-background">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map(y => (
+                    <SelectItem key={y} value={y}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <Button 
             variant="secondary" 
             onClick={generateMonthlyReport}
             disabled={isGenerating}
-            className="mt-4"
+            className="md:mt-4"
           >
             {isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
             Generate Report
@@ -240,7 +255,7 @@ export function PayrollReports() {
                 <div>
                   <CardTitle className="font-headline text-2xl">Monthly Payroll Summary</CardTitle>
                   <CardDescription className="text-primary font-bold uppercase tracking-widest text-xs">
-                    Period: {selectedMonth} 2024 • Manufacturing Unit #1
+                    Period: {selectedMonth} {selectedYear} • Manufacturing Unit #1
                   </CardDescription>
                 </div>
                 <div className="only-print text-right">
@@ -304,7 +319,7 @@ export function PayrollReports() {
                 <p className="text-xs uppercase font-bold">Manufacturing Unit #1 • Factory Payout Slip</p>
               </div>
               <div className="text-right">
-                <div className="text-xl font-headline font-bold">{selectedMonth} 2024</div>
+                <div className="text-xl font-headline font-bold">{selectedMonth} {selectedYear}</div>
                 <div className="text-[10px] uppercase font-bold">Salary Slip ID: PS-{selectedEmployeeForSlip.id}-{selectedMonth.substring(0,3)}</div>
               </div>
             </div>

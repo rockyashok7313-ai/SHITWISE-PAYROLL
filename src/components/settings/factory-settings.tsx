@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState } from "react";
@@ -87,6 +88,8 @@ export function FactorySettings() {
                       <SelectItem value="2023-24">FY 2023-24 (Apr-Mar)</SelectItem>
                       <SelectItem value="2024-25">FY 2024-25 (Apr-Mar)</SelectItem>
                       <SelectItem value="2025-26">FY 2025-26 (Apr-Mar)</SelectItem>
+                      <SelectItem value="2026-27">FY 2026-27 (Apr-Mar)</SelectItem>
+                      <SelectItem value="2027-28">FY 2027-28 (Apr-Mar)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

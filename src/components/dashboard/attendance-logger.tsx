@@ -29,7 +29,7 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-const YEARS = ["2023", "2024", "2025"];
+const YEARS = ["2023", "2024", "2025", "2026", "2027"];
 
 export function AttendanceLogger() {
   const { toast } = useToast();
@@ -40,7 +40,6 @@ export function AttendanceLogger() {
   const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
 
   useEffect(() => {
-    // Initializing entries with default date
     const today = new Date().toISOString().split('T')[0];
     setEntries(EMPLOYEES.map(emp => ({
       ...emp,
