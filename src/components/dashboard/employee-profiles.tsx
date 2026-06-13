@@ -160,13 +160,27 @@ export function EmployeeProfiles() {
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                   <Label htmlFor="rate" className="text-right text-xs">Rate (₹/hr)</Label>
-                                  <Input 
-                                    id="rate" 
-                                    type="number"
-                                    value={editingEmployee?.rate || 0} 
-                                    onChange={(e) => setEditingEmployee({ ...editingEmployee, rate: Number(e.target.value) })}
-                                    className="col-span-3 bg-background border-muted font-mono" 
-                                  />
+                                  <div className="col-span-3 relative">
+                                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                                    <Input 
+                                      id="rate" 
+                                      type="number"
+                                      value={editingEmployee?.rate || 0} 
+                                      onChange={(e) => setEditingEmployee({ ...editingEmployee, rate: Number(e.target.value) })}
+                                      className="pl-8 bg-background border-muted font-mono" 
+                                    />
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                  <Label className="text-right text-xs">Per Day Salary</Label>
+                                  <div className="col-span-3 relative">
+                                    <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                                    <Input 
+                                      readOnly 
+                                      value={editingEmployee ? (editingEmployee.rate * (editingEmployee.shift === '12-hour' ? 12 : 9)) : 0} 
+                                      className="pl-8 bg-muted/50 border-muted font-mono text-primary font-bold"
+                                    />
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                   <Label htmlFor="shift" className="text-right text-xs">Shift</Label>
