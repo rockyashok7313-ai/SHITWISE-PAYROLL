@@ -34,29 +34,6 @@
     --sidebar-border: 225 17% 15%;
     --sidebar-ring: 226 87% 66%;
   }
-
-  .dark {
-    /* Same as root because we are building dark mode first */
-    --background: 225 17% 7%;
-    --foreground: 0 0% 100%;
-    --card: 225 17% 10%;
-    --card-foreground: 0 0% 100%;
-    --popover: 225 17% 8%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 226 87% 66%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 225 17% 15%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 225 17% 12%;
-    --muted-foreground: 225 10% 65%;
-    --accent: 186 100% 50%;
-    --accent-foreground: 225 17% 7%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 225 17% 18%;
-    --input: 225 17% 18%;
-    --ring: 226 87% 66%;
-  }
 }
 
 @layer base {
@@ -69,4 +46,44 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-headline;
   }
+}
+
+@media print {
+  .no-print, 
+  nav, 
+  header, 
+  aside,
+  .tabs-list,
+  button {
+    display: none !important;
+  }
+  
+  .printable-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    color: black !important;
+    background: white !important;
+  }
+
+  .printable-area * {
+    color: black !important;
+    border-color: #ddd !important;
+  }
+
+  .only-print {
+    display: block !important;
+  }
+
+  body {
+    background: white !important;
+  }
+
+  .dark {
+    color-scheme: light;
+  }
+}
+
+.only-print {
+  display: none;
 }
