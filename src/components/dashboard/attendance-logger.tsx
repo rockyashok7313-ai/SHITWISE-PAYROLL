@@ -29,12 +29,14 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+const YEARS = ["2023", "2024", "2025"];
+
 export function AttendanceLogger() {
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
+  const [selectedYear, setSelectedYear] = useState<string>("2024");
   const [entries, setEntries] = useState<any[]>([]);
-  const [bulkDate, setBulkDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
 
   useEffect(() => {
@@ -55,14 +57,13 @@ export function AttendanceLogger() {
   const applyBulkSettings = () => {
     setEntries(prev => prev.map(entry => ({
       ...entry,
-      date: bulkDate,
       shift: bulkShift,
       hours: bulkShift === '12-hour' ? 12 : 9,
       isModified: true
     })));
     toast({
-      title: "Bulk Settings Applied",
-      description: `Updated all records to ${bulkDate} and ${bulkShift} shift.`,
+      title: "Bulk Shift Applied",
+      description: `Updated all staff to ${bulkShift} shift settings.`,
     });
   };
 
@@ -87,7 +88,7 @@ export function AttendanceLogger() {
   const handleFinalize = () => {
     toast({
       title: "Logs Finalized",
-      description: `Processed payroll entries for ${entries.length} staff members for ${selectedMonth}.`,
+      description: `Processed payroll entries for ${entries.length} staff members for ${selectedMonth} ${selectedYear}.`,
     });
   };
 
@@ -99,19 +100,31 @@ export function AttendanceLogger() {
             <Clock className="w-6 h-6" />
             Shift Logging Matrix
           </h2>
-          <div className="flex items-center gap-2 text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
             <CalendarDays className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Payroll Period:</span>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-[160px] h-9 bg-background border-primary/30 text-sm font-semibold text-primary">
-                <SelectValue placeholder="Select Month" />
-              </SelectTrigger>
-              <SelectContent>
-                {MONTHS.map(m => (
-                  <SelectItem key={m} value={m}>{m} 2024</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[130px] h-9 bg-background border-primary/30 text-sm font-semibold text-primary">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map(m => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[100px] h-9 bg-background border-primary/30 text-sm font-semibold text-primary">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  {YEARS.map(y => (
+                    <SelectItem key={y} value={y}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
         <div className="flex gap-2">
@@ -132,41 +145,32 @@ export function AttendanceLogger() {
             <Zap className="w-5 h-5 text-primary animate-pulse" />
             <div>
               <p className="text-sm font-semibold">Bulk Entry Controls</p>
-              <p className="text-xs text-muted-foreground">Apply standard values to the entire labour list.</p>
+              <p className="text-xs text-muted-foreground">Apply standard shift settings to the entire staff list.</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
+          <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-end">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground">Global Date</span>
-              <Input 
-                type="date" 
-                value={bulkDate} 
-                onChange={(e) => setBulkDate(e.target.value)}
-                className="h-9 w-[150px] bg-background border-muted"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase font-bold text-muted-foreground">Global Shift</span>
+              <span className="text-[10px] uppercase font-bold text-muted-foreground text-right sm:text-left">Global Shift Type</span>
               <Select 
                 value={bulkShift} 
                 onValueChange={(val) => setBulkShift(val as any)}
               >
-                <SelectTrigger className="w-[150px] h-9 bg-background border-muted">
+                <SelectTrigger className="w-[180px] h-10 bg-background border-primary/30 font-bold">
                   <SelectValue placeholder="Select Shift" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="9-hour">9-hour Shift</SelectItem>
-                  <SelectItem value="12-hour">12-hour Shift</SelectItem>
+                  <SelectItem value="9-hour">9-hour Shift (Standard)</SelectItem>
+                  <SelectItem value="12-hour">12-hour Shift (Factory)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <Button 
               variant="default" 
               size="sm" 
-              className="bg-primary text-primary-foreground h-9 self-end"
+              className="bg-primary text-primary-foreground h-10 px-6 self-end font-bold"
               onClick={applyBulkSettings}
             >
-              Apply All Changes
+              Apply to All Staff
             </Button>
           </div>
         </CardContent>
@@ -176,7 +180,7 @@ export function AttendanceLogger() {
         <Table>
           <TableHeader className="bg-muted/80 text-[10px] uppercase tracking-widest font-bold">
             <TableRow className="border-b border-border">
-              <th className="p-4 min-w-[160px] text-foreground text-left">Manual Entry Date</th>
+              <th className="p-4 min-w-[160px] text-foreground text-left">Entry Date</th>
               <th className="p-4 min-w-[200px] text-foreground text-left">Labourer Details</th>
               <th className="p-4 min-w-[150px] text-foreground text-left">Shift Type</th>
               <th className="p-4 min-w-[120px] text-primary text-left">Total Hrs</th>
