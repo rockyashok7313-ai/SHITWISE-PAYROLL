@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useRef } from "react";
@@ -11,8 +12,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 
 const monthlyTrendData = [
   { month: "Jan", cost: 125000 },
@@ -52,6 +51,10 @@ export function PayrollReports() {
     
     setIsDownloading(true);
     try {
+      // Dynamically import to avoid SSR issues
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
       const element = reportRef.current;
       const canvas = await html2canvas(element, {
         scale: 2,
@@ -119,7 +122,6 @@ export function PayrollReports() {
 
   return (
     <div className="space-y-6">
-      {/* Report Controls - Hidden during print */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print bg-card/30 p-4 border border-border rounded-xl">
         <div className="flex items-center gap-3">
           <CalendarDays className="w-5 h-5 text-primary" />
@@ -175,9 +177,7 @@ export function PayrollReports() {
         </div>
       </div>
 
-      {/* Printable Area */}
       <div className="printable-area space-y-8" ref={reportRef}>
-        {/* Month-Wise Summary Table */}
         {reportData && !selectedEmployeeForSlip && (
           <Card className="bg-card border-border shadow-xl">
             <CardHeader className="border-b border-border/50">
@@ -237,7 +237,6 @@ export function PayrollReports() {
           </Card>
         )}
 
-        {/* The Actual Printable Payslip */}
         {selectedEmployeeForSlip && (
           <div className="printable-payslip bg-white text-black p-8 border-2 border-black rounded-sm shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-black text-white px-4 py-1 text-[10px] font-bold uppercase tracking-widest no-print-force">
@@ -309,9 +308,7 @@ export function PayrollReports() {
         )}
       </div>
 
-      {/* Navigation Controls - Always Hidden in Printable View */}
       <div className="no-print space-y-8">
-        {/* Employee-Wise Payslip Selection */}
         {reportData && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -340,7 +337,6 @@ export function PayrollReports() {
           </div>
         )}
 
-        {/* Statutory Trend Chart */}
         {!selectedEmployeeForSlip && (
           <Card className="bg-card/30 border-border">
             <CardHeader>
@@ -388,7 +384,6 @@ export function PayrollReports() {
           </Card>
         )}
 
-        {/* Bonus Calculator Tool */}
         {!selectedEmployeeForSlip && (
           <Card className="bg-gradient-to-br from-card to-muted/30 border-primary/20">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -411,7 +406,6 @@ export function PayrollReports() {
           </Card>
         )}
 
-        {/* Payslip Clear Action */}
         {selectedEmployeeForSlip && (
           <div className="flex justify-center py-4">
             <Button variant="ghost" onClick={() => setSelectedEmployeeForSlip(null)} className="text-muted-foreground hover:text-foreground">
