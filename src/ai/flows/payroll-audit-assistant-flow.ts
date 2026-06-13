@@ -22,7 +22,7 @@ const PayrollAuditInputSchema = z.object({
           scheduledShiftType: z.enum(['9-hour', '12-hour', 'custom']).describe('Scheduled shift type for the day.'),
           actualClockIn: z.string().optional().describe('Actual clock-in time (HH:MM) if available.'),
           actualClockOut: z.string().optional().describe('Actual clock-out time (HH:MM) if available.'),
-          totalHoursWorked: z.number().optional().describe('Total hours worked for the day.'), // Can be derived, but useful for explicit input
+          totalHoursWorked: z.number().optional().describe('Total hours worked for the day.'), 
         })
       ).describe('List of daily attendance records for the employee.')
     })
@@ -57,11 +57,11 @@ const PayrollAuditOutputSchema = z.object({
   ).describe('Potential payroll discrepancies, including under/overpayments, unapproved overtime, or incorrect shift calculations.'),
   costForecast: z.object({
     period: z.string().describe('The period for the forecast (e.g., "Next 3 months").'),
-    totalEstimatedLaborCost: z.number().describe('Total estimated labor cost for the forecast period, in USD.'),
+    totalEstimatedLaborCost: z.number().describe('Total estimated labor cost for the forecast period, in Indian Rupee (INR).'),
     monthlyBreakdown: z.array(
       z.object({
         month: z.string().describe('Month of the forecast (YYYY-MM).'),
-        estimatedCost: z.number().describe('Estimated labor cost for that month, in USD.'),
+        estimatedCost: z.number().describe('Estimated labor cost for that month, in INR.'),
       })
     ).optional().describe('Monthly breakdown of estimated labor costs.'),
     notes: z.string().optional().describe('Any assumptions, factors considered, or caveats regarding the forecast.'),
@@ -77,7 +77,7 @@ const auditPrompt = ai.definePrompt({
   name: 'payrollAuditAssistantPrompt',
   input: { schema: PayrollAuditInputSchema },
   output: { schema: PayrollAuditOutputSchema },
-  prompt: `You are an expert payroll auditor and financial analyst. Your task is to analyze historical attendance data to identify unusual shift patterns, potential payroll discrepancies, and forecast future labor costs.
+  prompt: `You are an expert payroll auditor and financial analyst specializing in Indian labor markets. Your task is to analyze historical attendance data to identify unusual shift patterns, potential payroll discrepancies, and forecast future labor costs in Indian Rupees (INR).
 
 Here is the historical payroll data for various employees in JSON format:
 
@@ -87,8 +87,8 @@ Here is the historical payroll data for various employees in JSON format:
 
 Perform the following tasks:
 1.  **Identify Unusual Shift Patterns**: Look for anomalies like frequent very short or very long shifts, inconsistent days worked, shifts without clock-out, or unusual shift type changes.
-2.  **Detect Potential Payroll Discrepancies**: Compare scheduled vs. actual hours, ensure hourly rates are applied correctly, and identify any inconsistencies that could lead to underpayment or overpayment.
-3.  **Forecast Labor Costs**: Based on the provided historical data and detected patterns, provide a labor cost forecast.
+2.  **Detect Potential Payroll Discrepancies**: Compare scheduled vs. actual hours, ensure hourly rates (in INR) are applied correctly, and identify any inconsistencies that could lead to underpayment or overpayment.
+3.  **Forecast Labor Costs**: Based on the provided historical data and detected patterns, provide a labor cost forecast in INR.
 
 {{#if auditPeriod}}
 Focus your audit specifically on the period from {{{auditPeriod.startDate}}} to {{{auditPeriod.endDate}}}.
@@ -98,7 +98,7 @@ Focus your audit specifically on the period from {{{auditPeriod.startDate}}} to 
 Provide a labor cost forecast for the next {{{forecastPeriodMonths}}} months.
 {{/if}}
 
-Provide your analysis and findings in a JSON object strictly conforming to the PayrollAuditOutputSchema. Ensure all fields are populated and descriptions are detailed. If no unusual patterns or discrepancies are found, return empty arrays for those fields.`,
+Provide your analysis and findings in a JSON object strictly conforming to the PayrollAuditOutputSchema. Ensure all fields are populated and descriptions are detailed. If no unusual patterns or discrepancies are found, return empty arrays for those fields. All currency values should be in INR.`,
 });
 
 const payrollAuditAssistantFlow = ai.defineFlow(

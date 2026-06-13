@@ -1,9 +1,9 @@
 export const EMPLOYEES = [
-  { id: 'EMP001', name: 'Alex Rivera', role: 'Machine Operator', rate: 25, shift: '12-hour' },
-  { id: 'EMP002', name: 'Sarah Chen', role: 'Quality Lead', rate: 28, shift: '9-hour' },
-  { id: 'EMP003', name: 'Marcus Miller', role: 'Floor Supervisor', rate: 32, shift: '12-hour' },
-  { id: 'EMP004', name: 'Elena Rodriguez', role: 'Logistics Coord', rate: 24, shift: '9-hour' },
-  { id: 'EMP005', name: 'James Wilson', role: 'Maintenance Tech', rate: 30, shift: '12-hour' },
+  { id: 'EMP001', name: 'Arjun Mehta', gender: 'male', role: 'Machine Operator', rate: 450, shift: '12-hour' },
+  { id: 'EMP002', name: 'Priya Sharma', gender: 'female', role: 'Quality Lead', rate: 550, shift: '9-hour' },
+  { id: 'EMP003', name: 'Rajesh Kumar', gender: 'male', role: 'Floor Supervisor', rate: 650, shift: '12-hour' },
+  { id: 'EMP004', name: 'Ananya Iyer', gender: 'female', role: 'Logistics Coord', rate: 400, shift: '9-hour' },
+  { id: 'EMP005', name: 'Vikram Singh', gender: 'male', role: 'Maintenance Tech', rate: 600, shift: '12-hour' },
 ];
 
 export const ATTENDANCE_RECORDS = [

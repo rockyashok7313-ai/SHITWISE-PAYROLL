@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Clock, Save, FileText, Download } from "lucide-react";
+import { Clock, Save, Download } from "lucide-react";
 
 export function AttendanceLogger() {
   const [entries, setEntries] = useState(EMPLOYEES.map(emp => ({
@@ -117,7 +117,7 @@ export function AttendanceLogger() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-headline text-lg text-primary">
-                    ${(hours * entry.rate).toFixed(2)}
+                    ₹{(hours * entry.rate).toLocaleString('en-IN')}
                   </TableCell>
                 </TableRow>
               );

@@ -1,11 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock, Users, DollarSign, TrendingUp } from "lucide-react";
+import { Clock, Users, IndianRupee, TrendingUp } from "lucide-react";
 
 export function ShiftStats() {
   const stats = [
     { label: "Active Employees", value: "48", icon: Users, accent: "text-accent" },
     { label: "Hours Today", value: "432", icon: Clock, accent: "text-primary" },
-    { label: "Projected Cost", value: "$12,450", icon: DollarSign, accent: "text-accent" },
+    { label: "Projected Cost", value: "₹82,450", icon: IndianRupee, accent: "text-accent" },
     { label: "Efficiency", value: "94%", icon: TrendingUp, accent: "text-primary" },
   ];
 

@@ -119,7 +119,7 @@ export function PayrollAuditTool() {
                   <div className="p-4 rounded-lg bg-accent/5 border border-accent/20">
                     <div className="text-xs text-muted-foreground uppercase mb-1">Total Predicted Labor Cost</div>
                     <div className="text-3xl font-headline font-bold text-accent">
-                      ${results.costForecast?.totalEstimatedLaborCost.toLocaleString() ?? '0'}
+                      ₹{results.costForecast?.totalEstimatedLaborCost.toLocaleString('en-IN') ?? '0'}
                     </div>
                     <div className="text-xs text-muted-foreground mt-2">{results.costForecast?.period}</div>
                   </div>
@@ -136,7 +136,7 @@ export function PayrollAuditTool() {
                         {results.costForecast.monthlyBreakdown.map((m, i) => (
                           <div key={i} className="flex justify-between items-center text-sm p-2 border-b border-border/50">
                             <span>{m.month}</span>
-                            <span className="font-mono text-primary">${m.estimatedCost.toLocaleString()}</span>
+                            <span className="font-mono text-primary">₹{m.estimatedCost.toLocaleString('en-IN')}</span>
                           </div>
                         ))}
                       </div>
