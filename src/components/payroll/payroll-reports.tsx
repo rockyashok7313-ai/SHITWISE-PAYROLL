@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +39,7 @@ export function PayrollReports() {
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [reportData, setReportData] = useState<any[] | null>(null);
   const [selectedEmployeeForSlip, setSelectedEmployeeForSlip] = useState<any>(null);
 
@@ -46,12 +47,52 @@ export function PayrollReports() {
     window.print();
   };
 
+  const handleDownloadExcel = async () => {
+    if (!reportData) return;
+    setIsDownloadingExcel(true);
+    try {
+      const XLSX = await import("xlsx");
+      
+      const dataToExport = reportData.map(row => ({
+        "Employee ID": row.id,
+        "Name": row.name,
+        "Role": row.role,
+        "Shift": row.shift,
+        "Days Worked": row.daysWorked,
+        "Gross (₹)": row.gross,
+        "Incentive (₹)": row.incentive,
+        "Deductions (₹)": row.deductions,
+        "Net Payout (₹)": row.net
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Payroll Summary");
+      
+      const fileName = `Payroll_Report_${selectedMonth}_2024.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+
+      toast({
+        title: "Excel Downloaded",
+        description: `${fileName} has been saved.`,
+      });
+    } catch (error) {
+      console.error("Excel generation failed:", error);
+      toast({
+        variant: "destructive",
+        title: "Excel Failed",
+        description: "Could not generate Excel file.",
+      });
+    } finally {
+      setIsDownloadingExcel(false);
+    }
+  };
+
   const handleDownloadPDF = async () => {
     if (!reportRef.current) return;
     
     setIsDownloading(true);
     try {
-      // Dynamically import to avoid SSR issues
       const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
 
@@ -149,7 +190,21 @@ export function PayrollReports() {
           </Button>
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="border-border hover:bg-accent/5"
+            onClick={handleDownloadExcel}
+            disabled={!reportData || isDownloadingExcel}
+          >
+            {isDownloadingExcel ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <TableIcon className="w-4 h-4 mr-2 text-green-500" />
+            )}
+            Download Excel
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 
