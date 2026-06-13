@@ -37,6 +37,8 @@ export function EmployeeProfiles() {
   const calculateRates = () => {
     if (!calcInput || !editingEmployee) return;
     const inputVal = parseFloat(calcInput);
+    if (isNaN(inputVal)) return;
+
     const shiftHours = editingEmployee.shift === '12-hour' ? 12 : 9;
     
     if (calcMode === 'monthly-to-hourly') {
@@ -44,17 +46,18 @@ export function EmployeeProfiles() {
       const perHour = Math.round(perDay / shiftHours);
       setEditingEmployee({ ...editingEmployee, rate: perHour });
       toast({
-        title: "Rates Calculated",
-        description: `Applied ₹${perHour}/hr based on ₹${inputVal} monthly target.`,
+        title: "Rates Applied",
+        description: `Target Monthly ₹${inputVal} → ₹${perHour}/hr (based on ${calcDays} days).`,
       });
     } else {
+      // HOURLY TO MONTHLY/DAYS Logic
       const perDay = inputVal * shiftHours;
       const monthly = Math.round(perDay * calcDays);
-      toast({
-        title: "Projection Calculated",
-        description: `Hourly ₹${inputVal} results in approx ₹${monthly} per month (26 days).`,
-      });
       setEditingEmployee({ ...editingEmployee, rate: inputVal });
+      toast({
+        title: "Rates Calculated",
+        description: `₹${inputVal}/hr → ₹${perDay} per day and approx ₹${monthly} per month (${calcDays} days).`,
+      });
     }
   };
 
@@ -206,13 +209,13 @@ export function EmployeeProfiles() {
                                   </div>
                                   <p className="text-xs text-muted-foreground">
                                     {calcMode === 'monthly-to-hourly' 
-                                      ? "Calculate hourly rate from a target monthly salary." 
-                                      : "Calculate monthly projection from a fixed hourly rate."}
+                                      ? "Convert a target monthly salary into the required hourly rate." 
+                                      : "Project a monthly salary based on a fixed hourly rate."}
                                   </p>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
                                   <Label className="text-right text-xs">
-                                    {calcMode === 'monthly-to-hourly' ? "Monthly" : "Hourly"}
+                                    {calcMode === 'monthly-to-hourly' ? "Monthly Target" : "Hourly Rate"}
                                   </Label>
                                   <div className="col-span-3 relative">
                                     <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
@@ -226,7 +229,7 @@ export function EmployeeProfiles() {
                                   </div>
                                 </div>
                                 <div className="grid grid-cols-4 items-center gap-4">
-                                  <Label className="text-right text-xs">Days/Mo</Label>
+                                  <Label className="text-right text-xs">Working Days</Label>
                                   <Input 
                                     type="number" 
                                     value={calcDays}
@@ -234,9 +237,9 @@ export function EmployeeProfiles() {
                                     className="col-span-3 bg-background border-muted"
                                   />
                                 </div>
-                                <div className="flex justify-end">
+                                <div className="flex justify-end pt-2">
                                   <Button size="sm" variant="secondary" onClick={calculateRates}>
-                                    {calcMode === 'monthly-to-hourly' ? "Apply Calculated Hourly" : "Update Hourly Rate"}
+                                    {calcMode === 'monthly-to-hourly' ? "Apply Hourly Rate" : "Calculate Projection"}
                                   </Button>
                                 </div>
                               </TabsContent>

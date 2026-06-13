@@ -5,10 +5,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Clock, Save, Download, Edit2, CheckCircle2, RotateCcw } from "lucide-react";
+import { Clock, Save, Download, Edit2, CheckCircle2, Zap, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
 
 export function AttendanceLogger() {
   const { toast } = useToast();
@@ -20,6 +22,23 @@ export function AttendanceLogger() {
     clockOut: emp.shift === '9-hour' ? '18:00' : '20:00',
     isModified: false
   })));
+
+  // Bulk entry state
+  const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
+
+  const applyBulkShift = () => {
+    setEntries(prev => prev.map(entry => ({
+      ...entry,
+      shift: bulkShift,
+      clockIn: bulkShift === '9-hour' ? '09:00' : '08:00',
+      clockOut: bulkShift === '9-hour' ? '18:00' : '20:00',
+      isModified: true
+    })));
+    toast({
+      title: "Bulk Shift Applied",
+      description: `All ${entries.length} records updated to ${bulkShift} parameters.`,
+    });
+  };
 
   const toggleShift = (id: string) => {
     setEntries(prev => prev.map(e => {
@@ -48,7 +67,7 @@ export function AttendanceLogger() {
     setEditingId(null);
     toast({
       title: "Row Saved",
-      description: `Attendance entry for ${entries.find(e => e.id === id)?.name} has been updated locally.`,
+      description: `Attendance entry for ${entries.find(e => e.id === id)?.name} has been updated.`,
     });
   };
 
@@ -60,7 +79,7 @@ export function AttendanceLogger() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-xl font-headline font-semibold text-accent flex items-center gap-2">
           <Clock className="w-5 h-5" />
@@ -77,6 +96,41 @@ export function AttendanceLogger() {
           </Button>
         </div>
       </div>
+
+      {/* Bulk Entry Tools */}
+      <Card className="bg-accent/5 border-accent/20">
+        <CardContent className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Zap className="w-5 h-5 text-accent animate-pulse" />
+            <div>
+              <p className="text-sm font-semibold">Bulk Shift Entry</p>
+              <p className="text-xs text-muted-foreground">Set standard shift for all laborers at once.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <Select 
+              value={bulkShift} 
+              onValueChange={(val) => setBulkShift(val as any)}
+            >
+              <SelectTrigger className="w-full md:w-[180px] bg-background">
+                <SelectValue placeholder="Select Shift" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="9-hour">9-hour Shift</SelectItem>
+                <SelectItem value="12-hour">12-hour Shift</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button 
+              variant="secondary" 
+              size="sm" 
+              className="whitespace-nowrap"
+              onClick={applyBulkShift}
+            >
+              Apply to All
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="rounded-md border border-border bg-card/30 overflow-hidden">
         <Table>
