@@ -7,14 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet } from "lucide-react";
+import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June", 
+  "July", "August", "September", "October", "November", "December"
+];
+
 export function AttendanceLogger() {
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>("May");
   const [entries, setEntries] = useState(EMPLOYEES.map(emp => ({
     ...emp,
     shift: emp.shift as '9-hour' | '12-hour',
@@ -36,7 +42,7 @@ export function AttendanceLogger() {
     })));
     toast({
       title: "Bulk Shift Applied",
-      description: `All ${entries.length} records updated to standard ${bulkShift} hours.`,
+      description: `All ${entries.length} records updated to standard ${bulkShift} hours for ${selectedMonth}.`,
     });
   };
 
@@ -44,24 +50,40 @@ export function AttendanceLogger() {
     setEditingId(null);
     toast({
       title: "Entry Saved",
-      description: `Updated records for ${entries.find(e => e.id === id)?.name}.`,
+      description: `Updated records for ${entries.find(e => e.id === id)?.name} in ${selectedMonth}.`,
     });
   };
 
   const handleFinalize = () => {
     toast({
-      title: "Daily Logs Finalized",
-      description: `Processed payroll entries for ${entries.length} staff members.`,
+      title: "Monthly Logs Finalized",
+      description: `Processed payroll entries for ${entries.length} staff members for the month of ${selectedMonth}.`,
     });
   };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h2 className="text-2xl font-headline font-bold text-accent flex items-center gap-2">
-          <Calculator className="w-6 h-6" />
-          Attendance & Wage Matrix
-        </h2>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-headline font-bold text-accent flex items-center gap-2">
+            <Calculator className="w-6 h-6" />
+            Attendance & Wage Matrix
+          </h2>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <CalendarDays className="w-4 h-4" />
+            <span className="text-xs font-bold uppercase tracking-wider">Logging for:</span>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-[140px] h-8 bg-background border-border text-xs">
+                <SelectValue placeholder="Select Month" />
+              </SelectTrigger>
+              <SelectContent>
+                {MONTHS.map(m => (
+                  <SelectItem key={m} value={m}>{m} 2024</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="border-primary/30 hover:bg-primary/10">
             <Download className="w-4 h-4 mr-2" />
@@ -69,7 +91,7 @@ export function AttendanceLogger() {
           </Button>
           <Button variant="default" size="sm" onClick={handleFinalize} className="bg-primary hover:bg-primary/90">
             <Save className="w-4 h-4 mr-2" />
-            Finalize Payouts
+            Finalize {selectedMonth} Logs
           </Button>
         </div>
       </div>
@@ -242,7 +264,7 @@ export function AttendanceLogger() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="p-6 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-between shadow-sm">
           <div className="flex flex-col">
-            <span className="text-[10px] text-primary uppercase font-bold tracking-widest">Net Daily Liability</span>
+            <span className="text-[10px] text-primary uppercase font-bold tracking-widest">Net Liability ({selectedMonth})</span>
             <span className="text-2xl font-headline font-black text-foreground">
               ₹{entries.reduce((acc, curr) => acc + (curr.hours * curr.rate + curr.incentive - curr.weeklyAdvance - curr.loan), 0).toLocaleString('en-IN')}
             </span>
