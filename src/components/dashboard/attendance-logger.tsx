@@ -1,19 +1,16 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays, Trash2 } from "lucide-react";
+import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays, Trash2, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/badge"; // Note: Using Badge here for a placeholder if AlertDialog is missing, but actually it should be from @/components/ui/alert-dialog
-
-// Correcting imports for AlertDialog
 import {
   AlertDialog as ConfirmDialog,
   AlertDialogAction as ConfirmAction,
@@ -35,15 +32,22 @@ export function AttendanceLogger() {
   const { toast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
-  const [entries, setEntries] = useState(EMPLOYEES.map(emp => ({
-    ...emp,
-    shift: emp.shift as '9-hour' | '12-hour',
-    hours: emp.shift === '12-hour' ? 12 : 9,
-    incentive: 0,
-    weeklyAdvance: 0,
-    loan: 0,
-    isModified: false
-  })));
+  const [entries, setEntries] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Initializing entries with default date
+    const today = new Date().toISOString().split('T')[0];
+    setEntries(EMPLOYEES.map(emp => ({
+      ...emp,
+      date: today,
+      shift: emp.shift as '9-hour' | '12-hour',
+      hours: emp.shift === '12-hour' ? 12 : 9,
+      incentive: 0,
+      weeklyAdvance: 0,
+      loan: 0,
+      isModified: false
+    })));
+  }, []);
 
   const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
 
@@ -64,7 +68,7 @@ export function AttendanceLogger() {
     setEditingId(null);
     toast({
       title: "Entry Saved",
-      description: `Updated records for ${entries.find(e => e.id === id)?.name} in ${selectedMonth}.`,
+      description: `Updated records for ${entries.find(e => e.id === id)?.name} for date ${entries.find(e => e.id === id)?.date}.`,
     });
   };
 
@@ -74,14 +78,14 @@ export function AttendanceLogger() {
     toast({
       variant: "destructive",
       title: "Entry Removed",
-      description: `${deletedName} has been removed from the ${selectedMonth} payout list.`,
+      description: `${deletedName} has been removed from the current log.`,
     });
   };
 
   const handleFinalize = () => {
     toast({
-      title: "Monthly Logs Finalized",
-      description: `Processed payroll entries for ${entries.length} staff members for the month of ${selectedMonth}.`,
+      title: "Logs Finalized",
+      description: `Processed payroll entries for ${entries.length} staff members for ${selectedMonth}.`,
     });
   };
 
@@ -90,12 +94,12 @@ export function AttendanceLogger() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-headline font-bold text-accent flex items-center gap-2">
-            <Calculator className="w-6 h-6" />
-            Attendance & Wage Matrix
+            <Clock className="w-6 h-6" />
+            Shift Logging Matrix
           </h2>
           <div className="flex items-center gap-2 text-muted-foreground">
             <CalendarDays className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-wider">Logging for:</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Payroll Period:</span>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-[140px] h-8 bg-background border-border text-xs">
                 <SelectValue placeholder="Select Month" />
@@ -115,7 +119,7 @@ export function AttendanceLogger() {
           </Button>
           <Button variant="default" size="sm" onClick={handleFinalize} className="bg-primary hover:bg-primary/90">
             <Save className="w-4 h-4 mr-2" />
-            Finalize {selectedMonth} Logs
+            Finalize Attendance
           </Button>
         </div>
       </div>
@@ -125,8 +129,8 @@ export function AttendanceLogger() {
           <div className="flex items-center gap-3">
             <Zap className="w-5 h-5 text-primary animate-pulse" />
             <div>
-              <p className="text-sm font-semibold">Bulk Hours Entry</p>
-              <p className="text-xs text-muted-foreground">Apply standard shift hours to all labourers instantly.</p>
+              <p className="text-sm font-semibold">Bulk Shift Entry</p>
+              <p className="text-xs text-muted-foreground">Set standard hours for all workers with one click.</p>
             </div>
           </div>
           <div className="flex items-center gap-2 w-full md:w-auto">
@@ -158,9 +162,10 @@ export function AttendanceLogger() {
         <Table>
           <TableHeader className="bg-muted/80 text-[10px] uppercase tracking-widest font-bold">
             <TableRow className="border-b border-border">
+              <TableHead className="min-w-[150px] text-foreground">Entry Date</TableHead>
               <TableHead className="min-w-[200px] text-foreground">Labourer Details</TableHead>
-              <TableHead className="min-w-[120px] text-foreground">Shift Type</TableHead>
-              <TableHead className="min-w-[100px] text-primary">Total Hrs</TableHead>
+              <TableHead className="min-w-[150px] text-foreground">Shift Type</TableHead>
+              <TableHead className="min-w-[120px] text-primary">Total Hrs</TableHead>
               <TableHead className="min-w-[140px] text-green-500">Incentive (+)</TableHead>
               <TableHead className="min-w-[140px] text-destructive">Weekly Adv (-)</TableHead>
               <TableHead className="min-w-[140px] text-destructive">Loan (-)</TableHead>
@@ -179,6 +184,18 @@ export function AttendanceLogger() {
                   "transition-all border-border h-20 group",
                   isEditing ? "bg-accent/10" : "hover:bg-muted/50"
                 )}>
+                  <TableCell>
+                    <Input 
+                      type="date" 
+                      value={entry.date} 
+                      disabled={!isEditing}
+                      className="h-10 bg-background border-muted text-sm font-mono"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, date: val, isModified: true } : item));
+                      }}
+                    />
+                  </TableCell>
                   <TableCell className="py-4">
                     <div className="flex flex-col">
                       <span className="flex items-center gap-2 font-bold text-sm">
@@ -189,12 +206,30 @@ export function AttendanceLogger() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={cn(
-                      "text-[10px] px-2 py-0.5 font-bold",
-                      entry.shift === '12-hour' ? 'text-accent border-accent/40 bg-accent/5' : 'text-primary border-primary/40 bg-primary/5'
-                    )}>
-                      {entry.shift}
-                    </Badge>
+                    {isEditing ? (
+                      <Select 
+                        value={entry.shift} 
+                        onValueChange={(val) => {
+                          const hrs = val === '12-hour' ? 12 : 9;
+                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, shift: val, hours: hrs, isModified: true } : item));
+                        }}
+                      >
+                        <SelectTrigger className="h-10 bg-background border-muted">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="9-hour">9-hour</SelectItem>
+                          <SelectItem value="12-hour">12-hour</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Badge variant="outline" className={cn(
+                        "text-[10px] px-2 py-0.5 font-bold",
+                        entry.shift === '12-hour' ? 'text-accent border-accent/40 bg-accent/5' : 'text-primary border-primary/40 bg-primary/5'
+                      )}>
+                        {entry.shift}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Input 
@@ -293,7 +328,7 @@ export function AttendanceLogger() {
                           <ConfirmHeader>
                             <ConfirmTitle>Remove Entry?</ConfirmTitle>
                             <ConfirmDescription>
-                              This will remove {entry.name} from the {selectedMonth} list.
+                              This will remove {entry.name}'s log for {entry.date}.
                             </ConfirmDescription>
                           </ConfirmHeader>
                           <ConfirmFooter>
