@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { EMPLOYEES } from "@/lib/mock-data";
-import { Clock, Save, Download } from "lucide-react";
+import { Clock, Save, Download, CheckCircle2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 export function AttendanceLogger() {
+  const { toast } = useToast();
   const [entries, setEntries] = useState(EMPLOYEES.map(emp => ({
     ...emp,
     shift: emp.shift as '9-hour' | '12-hour',
@@ -34,12 +36,20 @@ export function AttendanceLogger() {
   const calculateHours = (inStr: string, outStr: string) => {
     const [inH, inM] = inStr.split(':').map(Number);
     const [outH, outM] = outStr.split(':').map(Number);
-    return ((outH * 60 + outM) - (inH * 60 + inM)) / 60;
+    const totalMinutes = (outH * 60 + outM) - (inH * 60 + inM);
+    return Math.max(0, totalMinutes / 60);
+  };
+
+  const handleFinalize = () => {
+    toast({
+      title: "Attendance Finalized",
+      description: `Daily logs for ${entries.length} employees have been saved and sent for verification.`,
+    });
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-xl font-headline font-semibold text-accent flex items-center gap-2">
           <Clock className="w-5 h-5" />
           Daily Attendance Logging
@@ -49,7 +59,7 @@ export function AttendanceLogger() {
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90">
+          <Button variant="default" size="sm" onClick={handleFinalize} className="bg-primary hover:bg-primary/90">
             <Save className="w-4 h-4 mr-2" />
             Finalize Bulk Entry
           </Button>
@@ -58,19 +68,20 @@ export function AttendanceLogger() {
 
       <div className="rounded-md border border-border bg-card/30 overflow-hidden">
         <Table>
-          <TableHeader className="bg-muted/50">
+          <TableHeader className="bg-muted/50 text-xs uppercase tracking-wider">
             <TableRow>
               <TableHead className="w-[200px]">Employee</TableHead>
-              <TableHead>Preset</TableHead>
+              <TableHead>Preset Shift</TableHead>
               <TableHead>Clock In</TableHead>
               <TableHead>Clock Out</TableHead>
               <TableHead>Total Hours</TableHead>
-              <TableHead className="text-right">Estimated Salary</TableHead>
+              <TableHead className="text-right">Estimated Payout</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {entries.map((entry) => {
               const hours = calculateHours(entry.clockIn, entry.clockOut);
+              const payout = hours * entry.rate;
               return (
                 <TableRow key={entry.id} className="hover:bg-accent/5 transition-colors border-border">
                   <TableCell className="font-medium">
@@ -83,7 +94,7 @@ export function AttendanceLogger() {
                     <Button 
                       variant="ghost" 
                       size="sm" 
-                      className={`h-7 px-2 font-mono text-xs ${entry.shift === '12-hour' ? 'text-accent' : 'text-primary'}`}
+                      className={`h-7 px-2 font-mono text-xs ${entry.shift === '12-hour' ? 'text-accent border border-accent/20' : 'text-primary border border-primary/20'}`}
                       onClick={() => toggleShift(entry.id)}
                     >
                       {entry.shift}
@@ -93,7 +104,7 @@ export function AttendanceLogger() {
                     <Input 
                       type="time" 
                       value={entry.clockIn} 
-                      className="h-8 bg-background/50 border-muted focus-visible:ring-accent"
+                      className="h-8 w-28 bg-background/50 border-muted focus-visible:ring-accent"
                       onChange={(e) => {
                         const val = e.target.value;
                         setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, clockIn: val } : item));
@@ -104,7 +115,7 @@ export function AttendanceLogger() {
                     <Input 
                       type="time" 
                       value={entry.clockOut} 
-                      className="h-8 bg-background/50 border-muted focus-visible:ring-accent"
+                      className="h-8 w-28 bg-background/50 border-muted focus-visible:ring-accent"
                       onChange={(e) => {
                         const val = e.target.value;
                         setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, clockOut: val } : item));
@@ -113,11 +124,11 @@ export function AttendanceLogger() {
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className="font-mono text-accent border-accent/30">
-                      {hours.toFixed(1)} hrs
+                      {hours.toFixed(2)} hrs
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-headline text-lg text-primary">
-                    ₹{(hours * entry.rate).toLocaleString('en-IN')}
+                    ₹{payout.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                   </TableCell>
                 </TableRow>
               );

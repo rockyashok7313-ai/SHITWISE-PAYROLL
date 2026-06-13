@@ -4,7 +4,11 @@ import { AttendanceLogger } from "@/components/dashboard/attendance-logger";
 import { PayrollAuditTool } from "@/components/payroll/audit-tool";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock, ListTodo, ShieldCheck } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Clock, ListTodo, ShieldCheck, History } from "lucide-react";
+import { ATTENDANCE_RECORDS } from "@/lib/mock-data";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function Home() {
   return (
@@ -16,7 +20,7 @@ export default function Home() {
           <h2 className="text-3xl font-headline font-bold tracking-tight text-foreground flex items-center gap-3">
             Operations Hub
           </h2>
-          <p className="text-muted-foreground">Precision shift management and payroll tracking system.</p>
+          <p className="text-muted-foreground">Precision shift management and payroll tracking system for India operations.</p>
         </header>
 
         <ShiftStats />
@@ -32,7 +36,7 @@ export default function Home() {
               AI Audit
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              <ListTodo className="w-4 h-4" />
+              <History className="w-4 h-4" />
               Shift History
             </TabsTrigger>
           </TabsList>
@@ -52,19 +56,59 @@ export default function Home() {
           <TabsContent value="history" className="mt-0 focus-visible:outline-none focus-visible:ring-0">
             <Card className="bg-card/30 border-border">
               <CardHeader>
-                <CardTitle className="font-headline">Recent Shift Logs</CardTitle>
-                <CardDescription>Comprehensive list of historical attendance and cost calculations.</CardDescription>
+                <CardTitle className="font-headline flex items-center gap-2">
+                  <History className="w-5 h-5 text-accent" />
+                  Recent Shift Logs
+                </CardTitle>
+                <CardDescription>Comprehensive list of verified historical attendance and payout calculations.</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground border-2 border-dashed border-border rounded-lg">
-                  <ListTodo className="w-12 h-12 mb-4 opacity-20" />
-                  <p className="font-medium">Historical logs will appear here after shift finalization.</p>
+                <div className="rounded-md border border-border bg-background/30">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Employee</TableHead>
+                        <TableHead>Shift</TableHead>
+                        <TableHead>Clock In/Out</TableHead>
+                        <TableHead>Hours</TableHead>
+                        <TableHead>Earnings</TableHead>
+                        <TableHead className="text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ATTENDANCE_RECORDS.map((record) => (
+                        <TableRow key={record.id} className="border-border hover:bg-muted/10">
+                          <TableCell className="font-medium text-muted-foreground">{record.date}</TableCell>
+                          <TableCell className="font-semibold">{record.employeeName}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={record.shiftType === '12-hour' ? 'text-accent border-accent/20' : 'text-primary border-primary/20'}>
+                              {record.shiftType}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {record.clockIn} - {record.clockOut}
+                          </TableCell>
+                          <TableCell>{record.hours.toFixed(2)}</TableCell>
+                          <TableCell className="text-primary font-bold">
+                            ₹{record.earnings.toLocaleString('en-IN')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Badge className={record.status === 'Overtime' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}>
+                              {record.status}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </main>
+      <Toaster />
     </div>
   );
 }
