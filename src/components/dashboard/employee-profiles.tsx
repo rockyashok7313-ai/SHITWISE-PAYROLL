@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EMPLOYEES as INITIAL_EMPLOYEES } from "@/lib/mock-data";
-import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Upload, Camera } from "lucide-react";
+import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Camera } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -137,7 +137,7 @@ export function EmployeeProfiles() {
                           </Avatar>
                           <div className="flex flex-col text-xs sm:text-sm">
                             <span className="font-semibold">{emp.name}</span>
-                            <span className="text-muted-foreground">{emp.id}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{emp.id} • {emp.gender}</span>
                           </div>
                         </div>
                       </TableCell>
@@ -225,6 +225,33 @@ export function EmployeeProfiles() {
                                       onChange={(e) => setEditingEmployee({ ...editingEmployee, name: e.target.value })}
                                       className="col-span-3 bg-background border-muted" 
                                     />
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="role" className="text-right text-xs">Role</Label>
+                                    <Input 
+                                      id="role" 
+                                      value={editingEmployee?.role || ""} 
+                                      onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value })}
+                                      className="col-span-3 bg-background border-muted" 
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="gender" className="text-right text-xs">Gender</Label>
+                                    <div className="col-span-3">
+                                      <Select 
+                                        value={editingEmployee?.gender} 
+                                        onValueChange={(val) => setEditingEmployee({ ...editingEmployee, gender: val })}
+                                      >
+                                        <SelectTrigger className="bg-background border-muted">
+                                          <SelectValue placeholder="Select Gender" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="male">Male</SelectItem>
+                                          <SelectItem value="female">Female</SelectItem>
+                                          <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
                                     <Label htmlFor="rate" className="text-right text-xs">Rate (₹/hr)</Label>
