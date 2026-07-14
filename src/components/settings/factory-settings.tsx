@@ -145,11 +145,11 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
               await supabase.from('employees').upsert(val.map((e: any) => ({
                 id: e.id,
                 company_id: compId,
-                name: e.name,
-                role: e.role,
-                shift: e.shift,
-                rate: e.rate,
-                status: e.status
+                name: e.name || 'Unknown',
+                role: e.role || 'Worker',
+                shift: e.shift || '9-hour',
+                rate: e.rate || 0,
+                status: e.status || 'Active'
               })));
             }
 
@@ -158,15 +158,15 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
               await supabase.from('attendance').upsert(val.map((a: any) => ({
                 id: a.id,
                 company_id: compId,
-                employee_id: a.employeeRefId,
+                employee_id: a.employeeRefId || a.employee_id,
                 date: a.date,
-                shift: a.shift,
-                hours: a.hours,
-                rate: a.rate,
+                shift: a.shift || '9-hour',
+                hours: a.hours || 0,
+                rate: a.rate || 0,
                 incentive: a.incentive || 0,
                 weekly_advance: a.weeklyAdvance || 0,
                 loan: a.loan || 0,
-                is_modified: a.isModified
+                is_modified: a.isModified || false
               })));
             }
           }

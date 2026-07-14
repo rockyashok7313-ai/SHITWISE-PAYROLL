@@ -181,18 +181,52 @@ export default function Home() {
       });
 
       const { data: dbEmployees, error: empErr } = await supabase.from('employees').select('*').eq('company_id', activeId);
-      if (empErr || !dbEmployees) {
-        const localEmp = localStorage.getItem(`employees_${activeId}`);
-        setEmployees(localEmp ? JSON.parse(localEmp) : []);
+      const localEmpString = localStorage.getItem(`employees_${activeId}`);
+      const localEmp = localEmpString ? JSON.parse(localEmpString) : [];
+      
+      if (empErr || !dbEmployees || (dbEmployees.length === 0 && localEmp.length > 0)) {
+        setEmployees(localEmp);
+        // Auto-repair cloud if it's empty but local has data
+        if (!empErr && dbEmployees && dbEmployees.length === 0 && localEmp.length > 0) {
+           const toUpsert = localEmp.map((e: any) => ({
+              id: e.id,
+              company_id: activeId,
+              name: e.name || 'Unknown',
+              role: e.role || 'Worker',
+              shift: e.shift || '9-hour',
+              rate: e.rate || 0,
+              status: e.status || 'Active'
+            }));
+           await supabase.from('employees').upsert(toUpsert);
+        }
       } else {
         setEmployees(dbEmployees);
         localStorage.setItem(`employees_${activeId}`, JSON.stringify(dbEmployees));
       }
 
       const { data: dbAttendance, error: attErr } = await supabase.from('attendance').select('*').eq('company_id', activeId);
-      if (attErr || !dbAttendance) {
-        const localAtt = localStorage.getItem(`attendance_${activeId}`);
-        setAttendance(localAtt ? JSON.parse(localAtt) : []);
+      const localAttString = localStorage.getItem(`attendance_${activeId}`);
+      const localAtt = localAttString ? JSON.parse(localAttString) : [];
+      
+      if (attErr || !dbAttendance || (dbAttendance.length === 0 && localAtt.length > 0)) {
+        setAttendance(localAtt);
+        // Auto-repair cloud if it's empty but local has data
+        if (!attErr && dbAttendance && dbAttendance.length === 0 && localAtt.length > 0) {
+           const toUpsert = localAtt.map((a: any) => ({
+              id: a.id,
+              company_id: activeId,
+              employee_id: a.employeeRefId || a.employee_id,
+              date: a.date,
+              shift: a.shift || '9-hour',
+              hours: a.hours || 0,
+              rate: a.rate || 0,
+              incentive: a.incentive || 0,
+              weekly_advance: a.weeklyAdvance || 0,
+              loan: a.loan || 0,
+              is_modified: a.isModified || false
+            }));
+           await supabase.from('attendance').upsert(toUpsert);
+        }
       } else {
         const mappedAtt = dbAttendance.map(a => ({
           ...a,
