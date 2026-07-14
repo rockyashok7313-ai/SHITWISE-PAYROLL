@@ -196,7 +196,7 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
                 id: a.id,
                 company_id: compId,
                 employee_id: a.employeeRefId || a.employee_id,
-                date: a.date,
+                date: (a.date && a.date.length >= 10) ? a.date.substring(0, 10) : new Date().toISOString().split('T')[0],
                 shift: a.shift || '9-hour',
                 hours: a.hours || 0,
                 rate: a.rate || 0,
