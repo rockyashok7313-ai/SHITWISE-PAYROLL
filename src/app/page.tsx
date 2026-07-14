@@ -184,10 +184,10 @@ export default function Home() {
       const localEmpString = localStorage.getItem(`employees_${activeId}`);
       const localEmp = localEmpString ? JSON.parse(localEmpString) : [];
       
-      if (empErr || !dbEmployees || (dbEmployees.length === 0 && localEmp.length > 0)) {
+      if (empErr || !dbEmployees || (localEmp.length > dbEmployees.length)) {
         setEmployees(localEmp);
-        // Auto-repair cloud if it's empty but local has data
-        if (!empErr && dbEmployees && dbEmployees.length === 0 && localEmp.length > 0) {
+        // Auto-repair cloud if local has more data than cloud
+        if (!empErr && dbEmployees && (localEmp.length > dbEmployees.length)) {
            const toUpsert = localEmp.map((e: any) => ({
               id: e.id,
               company_id: activeId,
@@ -208,10 +208,10 @@ export default function Home() {
       const localAttString = localStorage.getItem(`attendance_${activeId}`);
       const localAtt = localAttString ? JSON.parse(localAttString) : [];
       
-      if (attErr || !dbAttendance || (dbAttendance.length === 0 && localAtt.length > 0)) {
+      if (attErr || !dbAttendance || (localAtt.length > dbAttendance.length)) {
         setAttendance(localAtt);
-        // Auto-repair cloud if it's empty but local has data
-        if (!attErr && dbAttendance && dbAttendance.length === 0 && localAtt.length > 0) {
+        // Auto-repair cloud if local has more data than cloud
+        if (!attErr && dbAttendance && (localAtt.length > dbAttendance.length)) {
            const toUpsert = localAtt.map((a: any) => ({
               id: a.id,
               company_id: activeId,

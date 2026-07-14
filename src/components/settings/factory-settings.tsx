@@ -152,7 +152,11 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
         // --- END CORRUPTION AUTO-FIX ---
 
         // 1. Restore all keys to localStorage FIRST so data is never lost
-        for (const [key, val] of Object.entries(parsedData)) {
+        for (let [key, val] of Object.entries(parsedData)) {
+          // Force companies array to be saved under 'companies_cache' for compatibility with page.tsx
+          if (key === 'companies') {
+             key = 'companies_cache';
+          }
           if (typeof val === "string") {
             localStorage.setItem(key, val);
           } else {
@@ -176,6 +180,14 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
             })));
           }
 
+          // Collect all valid employee IDs from the backup to prevent foreign key errors
+          const validEmployeeIds = new Set();
+          for (const [key, val] of Object.entries(parsedData)) {
+            if (key.startsWith('employees_') && Array.isArray(val)) {
+               val.forEach((e: any) => validEmployeeIds.add(e.id));
+            }
+          }
+
           for (const [key, val] of Object.entries(parsedData)) {
             if (key.startsWith('employees_') && Array.isArray(val) && val.length > 0) {
               const compId = key.replace('employees_', '');
@@ -192,45 +204,64 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
 
             if (key.startsWith('attendance_') && Array.isArray(val) && val.length > 0) {
               const compId = key.replace('attendance_', '');
-              await supabase.from('attendance').upsert(val.map((a: any) => ({
-                id: a.id,
-                company_id: compId,
-                employee_id: a.employeeRefId || a.employee_id,
-                date: (a.date && a.date.length >= 10) ? a.date.substring(0, 10) : new Date().toISOString().split('T')[0],
-                shift: a.shift || '9-hour',
-                hours: a.hours || 0,
-                rate: a.rate || 0,
-                incentive: a.incentive || 0,
-                weekly_advance: a.weeklyAdvance || 0,
-                loan: a.loan || 0,
-                is_modified: a.isModified || false
-              })));
+              
+              // Filter out orphaned attendance records
+              const validAttendance = val.filter((a: any) => {
+                 const eid = a.employeeRefId || a.employee_id;
+                 return validEmployeeIds.has(eid);
+              });
+              
+              if (validAttendance.length > 0) {
+                await supabase.from('attendance').upsert(validAttendance.map((a: any) => ({
+                  id: a.id,
+                  company_id: compId,
+                  employee_id: a.employeeRefId || a.employee_id,
+                  date: (a.date && a.date.length >= 10) ? a.date.substring(0, 10) : new Date().toISOString().split('T')[0],
+                  shift: a.shift || '9-hour',
+                  hours: a.hours || 0,
+                  rate: a.rate || 0,
+                  incentive: a.incentive || 0,
+                  weekly_advance: a.weeklyAdvance || 0,
+                  loan: a.loan || 0,
+                  is_modified: a.isModified || false
+                })));
+              }
             }
           }
-        } catch (supabaseError) {
-          console.error("Cloud sync failed, but local restore succeeded:", supabaseError);
+        } catch (supabaseError: any) {
+          console.error("Supabase restore error:", supabaseError);
           toast({
-            variant: "destructive",
-            title: "Cloud Sync Failed",
-            description: "Your data was restored locally, but failed to sync to the cloud database. Please verify your internet connection and database permissions.",
+            title: "Restored Locally",
+            description: "Restore to cloud failed, but local data was updated. Error: " + (supabaseError.message || "Unknown error"),
+            variant: "destructive"
           });
+          // FORCE RELOAD EVEN IF CLOUD FAILS
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+          return;
         }
 
         toast({
-          title: "Backup Restored Successfully",
-          description: "All records have been restored and synced to the cloud.",
+          title: "Success",
+          description: "Backup restored successfully.",
         });
 
         setTimeout(() => {
           window.location.reload();
-        }, 1500);
-      } catch (error) {
-        console.error(error);
+        }, 2000);
+
+      } catch (err: any) {
+        console.error(err);
         toast({
-          variant: "destructive",
-          title: "Restore Failed",
-          description: "An error occurred during restoration.",
+          title: "Error",
+          description: "Failed to process backup file: " + (err.message || "Unknown error"),
+          variant: "destructive"
         });
+        // Reload after 3 seconds so the app state is fresh
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000);
       }
     };
     reader.readAsText(file);
