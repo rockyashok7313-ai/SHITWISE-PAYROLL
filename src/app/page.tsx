@@ -55,15 +55,15 @@ export default function Home() {
       const { data: dbCompanies, error: compErr } = await supabase.from('companies').select('*');
       let parsedCompanies = [];
       
+      const localComps = localStorage.getItem('companies_cache');
       if (compErr || !dbCompanies) {
-        const localComp = localStorage.getItem('companies_cache');
-        if (localComp) parsedCompanies = JSON.parse(localComp);
+        parsedCompanies = localComps ? (JSON.parse(localComps) || []) : [];
       } else {
         if (dbCompanies.length === 0) {
-          const localComp = localStorage.getItem('companies_cache');
-          if (localComp) {
+          const companiesToMigrate = localComps ? (JSON.parse(localComps) || []) : [];
+          if (companiesToMigrate.length > 0) {
             try {
-              const parsedLocal = JSON.parse(localComp);
+              const parsedLocal = companiesToMigrate;
               if (parsedLocal.length > 0) {
                 // Migrate companies
                 await supabase.from('companies').upsert(parsedLocal.map((c: any) => ({
@@ -182,7 +182,7 @@ export default function Home() {
 
       const { data: dbEmployees, error: empErr } = await supabase.from('employees').select('*').eq('company_id', activeId);
       const localEmpString = localStorage.getItem(`employees_${activeId}`);
-      const localEmp = localEmpString ? JSON.parse(localEmpString) : [];
+      const localEmp = localEmpString ? (JSON.parse(localEmpString) || []) : [];
       
       if (empErr || !dbEmployees || (localEmp.length > dbEmployees.length)) {
         setEmployees(localEmp);
@@ -206,7 +206,7 @@ export default function Home() {
 
       const { data: dbAttendance, error: attErr } = await supabase.from('attendance').select('*').eq('company_id', activeId);
       const localAttString = localStorage.getItem(`attendance_${activeId}`);
-      const localAtt = localAttString ? JSON.parse(localAttString) : [];
+      const localAtt = localAttString ? (JSON.parse(localAttString) || []) : [];
       
       if (attErr || !dbAttendance || (localAtt.length > dbAttendance.length)) {
         setAttendance(localAtt);
