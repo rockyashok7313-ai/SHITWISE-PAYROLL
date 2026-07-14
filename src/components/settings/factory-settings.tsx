@@ -21,10 +21,12 @@ interface FactorySettingsProps {
     currency: string;
     financialYear: string;
   };
+  activeCompanyId: string;
   onSave: (newConfig: any) => void;
+  onDelete: (id: string) => void;
 }
 
-export function FactorySettings({ config: propConfig, onSave }: FactorySettingsProps) {
+export function FactorySettings({ config: propConfig, activeCompanyId, onSave, onDelete }: FactorySettingsProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [config, setConfig] = useState(propConfig);
@@ -400,6 +402,19 @@ export function FactorySettings({ config: propConfig, onSave }: FactorySettingsP
                 className="hidden" 
               />
               <div className="pt-2">
+                <Button 
+                  onClick={() => {
+                    if (confirm("Are you sure you want to delete this company? All employees and attendance records associated with it will be permanently lost.")) {
+                      onDelete(activeCompanyId);
+                    }
+                  }} 
+                  variant="destructive" 
+                  className="w-full justify-start bg-red-950/40 text-red-500 hover:bg-red-900/60 border border-red-900/50 mb-3"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Current Company
+                </Button>
+                
                 <Button 
                   onClick={handleWipeData} 
                   variant="destructive" 

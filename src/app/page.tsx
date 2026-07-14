@@ -419,6 +419,35 @@ export default function Home() {
     }
   };
 
+  const handleDeleteCompany = async (companyId: string) => {
+    if (companies.length <= 1) {
+      toast({ variant: "destructive", title: "Cannot Delete", description: "You must have at least one company active." });
+      return;
+    }
+    
+    setLoading(true);
+    
+    // Delete from Supabase
+    const { error } = await supabase.from('companies').delete().eq('id', companyId);
+    if (error) {
+      console.error("Delete company error:", error);
+    }
+    
+    // Update local state
+    const remainingCompanies = companies.filter(c => c.id !== companyId);
+    setCompanies(remainingCompanies);
+    localStorage.setItem('companies_cache', JSON.stringify(remainingCompanies));
+    
+    localStorage.removeItem(`employees_${companyId}`);
+    localStorage.removeItem(`attendance_${companyId}`);
+    
+    // Switch to first available
+    await handleSwitchCompany(remainingCompanies[0].id);
+    
+    toast({ title: "Company Deleted", description: "The factory unit has been permanently deleted." });
+    setLoading(false);
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground font-body">
@@ -588,7 +617,9 @@ export default function Home() {
             <FactorySettings 
               key={activeCompanyId}
               config={config} 
+              activeCompanyId={activeCompanyId}
               onSave={handleConfigSave} 
+              onDelete={handleDeleteCompany}
             />
           </TabsContent>
         </Tabs>
