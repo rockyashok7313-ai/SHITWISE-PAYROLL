@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EMPLOYEES as INITIAL_EMPLOYEES } from "@/lib/mock-data";
-import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Camera, Plus, Search } from "lucide-react";
+import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Camera, Plus, Search, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -462,6 +462,70 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                       <TableCell className="font-mono text-sm text-accent">₹{monthly.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="hover:text-primary"
+                              >
+                                <Eye className="w-4 h-4 mr-1" />
+                                View
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[400px] bg-card border-border shadow-2xl">
+                              <DialogHeader className="pb-4 border-b border-border/50">
+                                <DialogTitle className="font-headline text-center text-xl">Staff ID Card</DialogTitle>
+                              </DialogHeader>
+                              <div className="flex flex-col items-center pt-4 space-y-4">
+                                <Avatar className="h-32 w-32 border-4 border-primary/20 shadow-lg">
+                                  {emp.photoUrl ? (
+                                    <AvatarImage src={emp.photoUrl} />
+                                  ) : (
+                                    <AvatarFallback className="bg-primary/10 text-primary text-4xl">
+                                      {emp.name.split(' ').map((n: string) => n[0]).join('')}
+                                    </AvatarFallback>
+                                  )}
+                                </Avatar>
+                                <div className="text-center space-y-1">
+                                  <h3 className="text-2xl font-bold font-headline text-foreground">{emp.name}</h3>
+                                  <p className="text-sm text-muted-foreground font-mono">{emp.id} • {emp.gender.toUpperCase()}</p>
+                                  <Badge variant="outline" className="mt-2 bg-primary/10 text-primary border-primary/20 uppercase">{emp.role}</Badge>
+                                </div>
+                              </div>
+                              <div className="grid gap-2 mt-6">
+                                <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border/50 hover:bg-muted/40 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <Phone className="w-4 h-4 text-primary" />
+                                    <span className="text-sm text-muted-foreground">Mobile Number</span>
+                                  </div>
+                                  <span className="font-mono text-sm">{emp.mobile || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border/50 hover:bg-muted/40 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <Landmark className="w-4 h-4 text-primary" />
+                                    <span className="text-sm text-muted-foreground">Bank Name</span>
+                                  </div>
+                                  <span className="font-medium text-sm">{emp.bankName || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border/50 hover:bg-muted/40 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <CreditCard className="w-4 h-4 text-primary" />
+                                    <span className="text-sm text-muted-foreground">Account Number</span>
+                                  </div>
+                                  <span className="font-mono text-sm tracking-widest">{emp.accountNumber || 'N/A'}</span>
+                                </div>
+                                <div className="flex items-center justify-between p-3 bg-muted/20 rounded-lg border border-border/50 hover:bg-muted/40 transition-colors">
+                                  <div className="flex items-center gap-3">
+                                    <IndianRupee className="w-4 h-4 text-primary" />
+                                    <span className="text-sm text-muted-foreground">IFSC Code</span>
+                                  </div>
+                                  <span className="font-mono text-sm tracking-wider uppercase">{emp.ifscCode || 'N/A'}</span>
+                                </div>
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+
                           <Dialog>
                             <DialogTrigger asChild>
                               <Button 
