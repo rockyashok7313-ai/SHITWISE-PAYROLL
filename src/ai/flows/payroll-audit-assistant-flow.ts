@@ -1,114 +1,109 @@
-'use server';
 /**
- * @fileOverview An AI-powered audit tool for analyzing historical attendance data.
+ * @fileOverview A mock AI-powered audit tool for analyzing historical attendance data.
  *
- * - payrollAuditAssistant - A function that orchestrates the payroll audit process.
- * - PayrollAuditInput - The input type for the payrollAuditAssistant function.
- * - PayrollAuditOutput - The return type for the payrollAuditAssistant function.
+ * Runs client-side to allow free static hosting without backend/Server Action requirements.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 
 const PayrollAuditInputSchema = z.object({
   companyPayrollData: z.array(
     z.object({
-      employeeId: z.string().describe('Unique identifier for the employee.'),
-      employeeName: z.string().describe('Name of the employee.'),
-      hourlyRate: z.number().describe('The employee\'s hourly pay rate.'),
+      employeeId: z.string(),
+      employeeName: z.string(),
+      hourlyRate: z.number(),
       attendance: z.array(
         z.object({
-          date: z.string().describe('Date of the attendance record (YYYY-MM-DD).'),
-          scheduledShiftType: z.enum(['9-hour', '12-hour', 'custom']).describe('Scheduled shift type for the day.'),
-          actualClockIn: z.string().optional().describe('Actual clock-in time (HH:MM) if available.'),
-          actualClockOut: z.string().optional().describe('Actual clock-out time (HH:MM) if available.'),
-          totalHoursWorked: z.number().optional().describe('Total hours worked for the day.'), 
+          date: z.string(),
+          scheduledShiftType: z.enum(['9-hour', '12-hour', 'custom']),
+          actualClockIn: z.string().optional(),
+          actualClockOut: z.string().optional(),
+          totalHoursWorked: z.number().optional(), 
         })
-      ).describe('List of daily attendance records for the employee.')
+      )
     })
-  ).describe('Historical attendance data for multiple employees.'),
+  ),
   auditPeriod: z.object({
-    startDate: z.string().describe('Start date for the audit period (YYYY-MM-DD).'),
-    endDate: z.string().describe('End date for the audit period (YYYY-MM-DD).'),
-  }).optional().describe('Optional date range to focus the audit.'),
-  forecastPeriodMonths: z.number().int().min(1).optional().describe('Number of months to forecast labor costs for.'),
+    startDate: z.string(),
+    endDate: z.string(),
+  }).optional(),
+  forecastPeriodMonths: z.number().optional(),
 });
 export type PayrollAuditInput = z.infer<typeof PayrollAuditInputSchema>;
 
 const PayrollAuditOutputSchema = z.object({
-  summary: z.string().describe('A general summary of the payroll audit findings, including overall health and key insights.'),
+  summary: z.string(),
   unusualShiftPatterns: z.array(
     z.object({
-      employeeId: z.string().describe('Employee ID with the unusual pattern.'),
-      employeeName: z.string().describe('Employee name with the unusual pattern.'),
-      patternDescription: z.string().describe('Description of the unusual shift pattern observed.'),
-      exampleDates: z.array(z.string()).optional().describe('Example dates where the pattern was observed (YYYY-MM-DD).'),
+      employeeId: z.string(),
+      employeeName: z.string(),
+      patternDescription: z.string(),
+      exampleDates: z.array(z.string()).optional(),
     })
-  ).describe('Identified unusual shift patterns, such as frequent short shifts, excessive overtime, or inconsistent workdays.'),
+  ),
   potentialPayrollDiscrepancies: z.array(
     z.object({
-      employeeId: z.string().describe('Employee ID with the potential discrepancy.'),
-      employeeName: z.string().describe('Employee name with the potential discrepancy.'),
-      date: z.string().optional().describe('Date of the discrepancy (YYYY-MM-DD).'),
-      discrepancyType: z.string().describe('Type of discrepancy (e.g., "Underpaid", "Overpaid", "Unapproved Overtime", "Incorrect Shift Calculation").'),
-      details: z.string().describe('Detailed explanation of the discrepancy, including calculated versus expected values.'),
-      suggestedAction: z.string().optional().describe('Suggested action to resolve the discrepancy.'),
+      employeeId: z.string(),
+      employeeName: z.string(),
+      date: z.string().optional(),
+      discrepancyType: z.string(),
+      details: z.string(),
+      suggestedAction: z.string().optional(),
     })
-  ).describe('Potential payroll discrepancies, including under/overpayments, unapproved overtime, or incorrect shift calculations.'),
+  ),
   costForecast: z.object({
-    period: z.string().describe('The period for the forecast (e.g., "Next 3 months").'),
-    totalEstimatedLaborCost: z.number().describe('Total estimated labor cost for the forecast period, in Indian Rupee (INR).'),
+    period: z.string(),
+    totalEstimatedLaborCost: z.number(),
     monthlyBreakdown: z.array(
       z.object({
-        month: z.string().describe('Month of the forecast (YYYY-MM).'),
-        estimatedCost: z.number().describe('Estimated labor cost for that month, in INR.'),
+        month: z.string(),
+        estimatedCost: z.number(),
       })
-    ).optional().describe('Monthly breakdown of estimated labor costs.'),
-    notes: z.string().optional().describe('Any assumptions, factors considered, or caveats regarding the forecast.'),
-  }).optional().describe('Forecasted future labor costs based on historical data and identified patterns.'),
+    ).optional(),
+    notes: z.string().optional(),
+  }).optional(),
 });
 export type PayrollAuditOutput = z.infer<typeof PayrollAuditOutputSchema>;
 
 export async function payrollAuditAssistant(input: PayrollAuditInput): Promise<PayrollAuditOutput> {
-  return payrollAuditAssistantFlow(input);
+  // Simulate network/AI response latency
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  return {
+    summary: "The payroll audit for the period of Oct 1st to Oct 3rd, 2023, shows high compliance but identifies 2 unusual shift patterns and 1 potential overpayment discrepancy. Labor costs are projected to stabilize in the next quarter.",
+    unusualShiftPatterns: [
+      {
+        employeeId: "emp-1",
+        employeeName: "Rajesh Kumar",
+        patternDescription: "Excessive shift length exceeding the standard 12-hour shift on Oct 3rd.",
+        exampleDates: ["2023-10-03"]
+      },
+      {
+        employeeId: "emp-3",
+        employeeName: "Sunita Devi",
+        patternDescription: "Inconsistent shift duration, clocking under 12 hours on Oct 2nd.",
+        exampleDates: ["2023-10-02"]
+      }
+    ],
+    potentialPayrollDiscrepancies: [
+      {
+        employeeId: "emp-1",
+        employeeName: "Rajesh Kumar",
+        date: "2023-10-03",
+        discrepancyType: "Unapproved Overtime",
+        details: "Worked 13.25 hours instead of the scheduled 12 hours. Calculated overtime payout discrepancy of ₹350.",
+        suggestedAction: "Verify supervisor authorization for the extra 1.25 hours."
+      }
+    ],
+    costForecast: {
+      period: "Next 3 months",
+      totalEstimatedLaborCost: 425000,
+      monthlyBreakdown: [
+        { month: "2023-11", estimatedCost: 140000 },
+        { month: "2023-12", estimatedCost: 142000 },
+        { month: "2024-01", estimatedCost: 143000 }
+      ],
+      notes: "Cost forecast is calculated based on current employee rates and standard shift distribution."
+    }
+  };
 }
-
-const auditPrompt = ai.definePrompt({
-  name: 'payrollAuditAssistantPrompt',
-  input: { schema: PayrollAuditInputSchema },
-  output: { schema: PayrollAuditOutputSchema },
-  prompt: `You are an expert payroll auditor and financial analyst specializing in Indian labor markets. Your task is to analyze historical attendance data to identify unusual shift patterns, potential payroll discrepancies, and forecast future labor costs in Indian Rupees (INR).
-
-Here is the historical payroll data for various employees in JSON format:
-
-<DATA>
-{{{JSON.stringify companyPayrollData}}}
-</DATA>
-
-Perform the following tasks:
-1.  **Identify Unusual Shift Patterns**: Look for anomalies like frequent very short or very long shifts, inconsistent days worked, shifts without clock-out, or unusual shift type changes.
-2.  **Detect Potential Payroll Discrepancies**: Compare scheduled vs. actual hours, ensure hourly rates (in INR) are applied correctly, and identify any inconsistencies that could lead to underpayment or overpayment.
-3.  **Forecast Labor Costs**: Based on the provided historical data and detected patterns, provide a labor cost forecast in INR.
-
-{{#if auditPeriod}}
-Focus your audit specifically on the period from {{{auditPeriod.startDate}}} to {{{auditPeriod.endDate}}}.
-{{/if}}
-
-{{#if forecastPeriodMonths}}
-Provide a labor cost forecast for the next {{{forecastPeriodMonths}}} months.
-{{/if}}
-
-Provide your analysis and findings in a JSON object strictly conforming to the PayrollAuditOutputSchema. Ensure all fields are populated and descriptions are detailed. If no unusual patterns or discrepancies are found, return empty arrays for those fields. All currency values should be in INR.`,
-});
-
-const payrollAuditAssistantFlow = ai.defineFlow(
-  {
-    name: 'payrollAuditAssistantFlow',
-    inputSchema: PayrollAuditInputSchema,
-    outputSchema: PayrollAuditOutputSchema,
-  },
-  async (input) => {
-    const { output } = await auditPrompt(input);
-    return output!;
-  }
-);

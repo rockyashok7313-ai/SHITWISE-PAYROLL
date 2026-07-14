@@ -1,17 +1,30 @@
 
 "use client"
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Calendar } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
 import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 const monthlyTrendData = [
   { month: "Jan", cost: 125000 },
@@ -33,13 +46,302 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
-const YEARS = ["2023", "2024", "2025", "2026", "2027"];
+const FY_MONTHS = [
+  "October", "November", "December", 
+  "January", "February", "March", "April", "May", "June", "July", "August", "September"
+];
 
-export function PayrollReports() {
+const getMonthYearLabel = (month: string, fy: string) => {
+  const parts = fy.split('-');
+  const startYear = parts[0];
+  const endYear = parts.length > 1 ? parts[1] : startYear;
+  const isSecondYear = [
+    "January", "February", "March", "April", "May", "June", "July", "August", "September"
+  ].includes(month);
+  const year = isSecondYear ? endYear : startYear;
+  return `${month.toUpperCase()} ${year}`;
+};
+
+const YEARS = ["2023", "2024", "2025", "2026", "2027"];
+const FY_YEARS = ["2022-2023", "2023-2024", "2024-2025", "2025-2026", "2026-2027", "2027-2028"];
+
+interface PayrollReportsProps {
+  activeFinancialYear: string;
+  employees: any[];
+  attendance: any[];
+}
+
+interface MonthlySalaries {
+  January: number;
+  February: number;
+  March: number;
+  April: number;
+  May: number;
+  June: number;
+  July: number;
+  August: number;
+  September: number;
+  October: number;
+  November: number;
+  December: number;
+}
+
+interface BonusEntry {
+  id: string;
+  name: string;
+  role: string;
+  monthlySalaries: MonthlySalaries;
+  includedMonths?: string[];
+  yearlySalary: number; // sum of monthlySalaries
+  percentage: number;
+  bonusAmount: number;
+}
+
+export function PayrollReports({ activeFinancialYear, employees, attendance }: PayrollReportsProps) {
   const { toast } = useToast();
   const reportRef = useRef<HTMLDivElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
-  const [selectedYear, setSelectedYear] = useState<string>("2024");
+  const [selectedYear, setSelectedYear] = useState<string>(activeFinancialYear.split('-')[0]);
+
+  // Bonus Calculator States
+  const [isBonusViewActive, setIsBonusViewActive] = useState(false);
+  const [isDraggingMonths, setIsDraggingMonths] = useState(false);
+  const [dragAction, setDragAction] = useState<'check' | 'uncheck' | null>(null);
+  const [draggedEmployeeIndex, setDraggedEmployeeIndex] = useState<number | null>(null);
+  const [bonusRefYear, setBonusRefYear] = useState<string>(activeFinancialYear);
+  const [bonusPercentage, setBonusPercentage] = useState<number>(8.33);
+  const [bonusEntries, setBonusEntries] = useState<BonusEntry[]>([]);
+  const [activeEditEmployeeIndex, setActiveEditEmployeeIndex] = useState<number>(0);
+  const [sheetSelectedMonth, setSheetSelectedMonth] = useState<string>("January");
+  const [visibleMonths, setVisibleMonths] = useState<string[]>(FY_MONTHS);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDraggingMonths(false);
+      setDragAction(null);
+      setDraggedEmployeeIndex(null);
+    };
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, []);
+
+  const handleMonthMouseDown = (empIndex: number, month: string, currentVal: boolean) => {
+    setIsDraggingMonths(true);
+    const targetState = !currentVal;
+    setDragAction(targetState ? 'check' : 'uncheck');
+    setDraggedEmployeeIndex(empIndex);
+    handleUpdateEntry(empIndex, "toggleMonth", null, month as keyof MonthlySalaries);
+  };
+
+  const handleMonthMouseEnter = (empIndex: number, month: string, isIncluded: boolean) => {
+    if (!isDraggingMonths || dragAction === null || draggedEmployeeIndex !== empIndex) return;
+    const targetVal = dragAction === 'check';
+    if (isIncluded !== targetVal) {
+      handleUpdateEntry(empIndex, "toggleMonth", null, month as keyof MonthlySalaries);
+    }
+  };
+
+  useEffect(() => {
+    setSelectedYear(activeFinancialYear.split('-')[0]);
+    setBonusRefYear(activeFinancialYear);
+  }, [activeFinancialYear]);
+
+  const initializeBonusEntries = (year: string, globalPct: number) => {
+    const saved = localStorage.getItem(`bonuses_${activeFinancialYear}_${year}`);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Migration to ensure includedMonths exists
+      const migrated = parsed.map((entry: any) => ({
+        ...entry,
+        includedMonths: entry.includedMonths || MONTHS
+      }));
+      setBonusEntries(migrated);
+      if (migrated.length > 0 && migrated[0].percentage !== undefined) {
+        setBonusPercentage(migrated[0].percentage);
+      }
+      setActiveEditEmployeeIndex(0);
+      return;
+    }
+
+    const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
+
+    const computed = roster.map(emp => {
+      const monthlySalaries: MonthlySalaries = {
+        January: 0, February: 0, March: 0, April: 0, May: 0, June: 0,
+        July: 0, August: 0, September: 0, October: 0, November: 0, December: 0
+      };
+
+      const shiftHours = emp.shift === '12-hour' ? 12 : 9;
+      const dailyRate = emp.rate * shiftHours;
+      const defaultMonthlySalary = dailyRate * 26;
+
+      MONTHS.forEach(mName => {
+        let mSalary = 0;
+        if (attendance && attendance.length > 0) {
+          const empLogs = attendance.filter(entry => {
+            if (entry.id !== emp.id) return false;
+            const parts = entry.date.split('-');
+            if (parts.length < 3) return false;
+            const entryYear = parts[0];
+            const entryMonthIndex = parseInt(parts[1]) - 1;
+            const entryMonthName = MONTHS[entryMonthIndex];
+            
+            let expectedYear = year;
+            if (year.includes('-')) {
+              const fyParts = year.split('-');
+              expectedYear = [
+                "January", "February", "March", "April", "May", "June", "July", "August", "September"
+              ].includes(mName) ? fyParts[1] : fyParts[0];
+            }
+            
+            return entryMonthName === mName && entryYear === expectedYear;
+          });
+
+          if (empLogs.length > 0) {
+            mSalary = empLogs.reduce((sum, log) => {
+              const gross = log.hours * log.rate;
+              const net = gross + (log.incentive || 0) - (log.weeklyAdvance || 0) - (log.loan || 0);
+              return sum + net;
+            }, 0);
+          }
+        }
+        monthlySalaries[mName as keyof MonthlySalaries] = mSalary > 0 ? mSalary : defaultMonthlySalary;
+      });
+
+      const yearlySalary = Object.values(monthlySalaries).reduce((sum, sal) => sum + sal, 0);
+      const bonusAmount = Math.round((yearlySalary * globalPct) / 100);
+
+      return {
+        id: emp.id,
+        name: emp.name,
+        role: emp.role,
+        monthlySalaries,
+        includedMonths: MONTHS,
+        yearlySalary,
+        percentage: globalPct,
+        bonusAmount
+      };
+    });
+
+    setBonusEntries(computed);
+    setActiveEditEmployeeIndex(0);
+  };
+
+  useEffect(() => {
+    if (isBonusViewActive) {
+      initializeBonusEntries(bonusRefYear, bonusPercentage);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBonusViewActive, bonusRefYear]);
+
+  const handleGlobalPercentageChange = (pct: number) => {
+    setBonusPercentage(pct);
+    setBonusEntries(prev => prev.map(entry => {
+      const bonusAmount = Math.round((entry.yearlySalary * pct) / 100);
+      return {
+        ...entry,
+        percentage: pct,
+        bonusAmount
+      };
+    }));
+  };
+
+  const handleUpdateEntry = (index: number, field: keyof BonusEntry | 'monthlySalaries' | 'toggleMonth', value: any, monthKey?: keyof MonthlySalaries) => {
+    setBonusEntries(prev => {
+      const updated = [...prev];
+      const entry = { ...updated[index] };
+      const included = entry.includedMonths ? [...entry.includedMonths] : [...MONTHS];
+
+      if (field === "monthlySalaries" && monthKey) {
+        const salaries = { ...entry.monthlySalaries };
+        salaries[monthKey] = value;
+        entry.monthlySalaries = salaries;
+        
+        // Sum only included months
+        entry.yearlySalary = Object.keys(salaries).reduce((sum, m) => {
+          if (included.includes(m)) {
+            return sum + (salaries[m as keyof MonthlySalaries] || 0);
+          }
+          return sum;
+        }, 0);
+        entry.bonusAmount = Math.round((entry.yearlySalary * entry.percentage) / 100);
+      } else if (field === "toggleMonth" && monthKey) {
+        const monthStr = monthKey as string;
+        const idx = included.indexOf(monthStr);
+        if (idx > -1) {
+          included.splice(idx, 1);
+        } else {
+          included.push(monthStr);
+        }
+        entry.includedMonths = included;
+        
+        // Recalculate yearlySalary based on updated included months
+        entry.yearlySalary = Object.keys(entry.monthlySalaries).reduce((sum, m) => {
+          if (included.includes(m)) {
+            return sum + (entry.monthlySalaries[m as keyof MonthlySalaries] || 0);
+          }
+          return sum;
+        }, 0);
+        entry.bonusAmount = Math.round((entry.yearlySalary * entry.percentage) / 100);
+      } else if (field === "percentage") {
+        entry.percentage = value;
+        entry.bonusAmount = Math.round((entry.yearlySalary * value) / 100);
+      } else if (field === "bonusAmount") {
+        entry.bonusAmount = value;
+      }
+
+      updated[index] = entry;
+      return updated;
+    });
+  };
+
+  const handleSaveBonuses = () => {
+    localStorage.setItem(`bonuses_${activeFinancialYear}_${bonusRefYear}`, JSON.stringify(bonusEntries));
+    toast({
+      title: "Bonus Ledger Saved",
+      description: `Persisted yearly bonus calculations for year ${bonusRefYear} under active FY.`,
+    });
+    setIsBonusViewActive(false);
+  };
+
+  const handleDownloadBonusCSV = () => {
+    try {
+      const monthHeaders = FY_MONTHS.map(m => getMonthYearLabel(m, bonusRefYear)).join(",");
+      let csvContent = `Staff ID,Name,Role,${monthHeaders},Total,Bonus %,Bonus Amount,Round Off\n`;
+      
+      bonusEntries.forEach(entry => {
+        const exactAmount = (entry.yearlySalary * entry.percentage) / 100;
+        const m = entry.monthlySalaries;
+        const mSalariesStr = FY_MONTHS.map(month => m[month as keyof MonthlySalaries] || 0).join(",");
+        
+        csvContent += `"${entry.id}","${entry.name}","${entry.role}",${mSalariesStr},${entry.yearlySalary},${entry.percentage},${exactAmount.toFixed(2)},${entry.bonusAmount}\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", url);
+      downloadAnchor.setAttribute("download", `Yearly_Bonus_Report_${bonusRefYear}.csv`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "CSV Downloaded",
+        description: "Yearly bonus ledger exported successfully with 12-month breakdown.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: "Could not export CSV file.",
+      });
+    }
+  };
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
@@ -140,7 +442,8 @@ export function PayrollReports() {
   const generateMonthlyReport = () => {
     setIsGenerating(true);
     setTimeout(() => {
-      const data = EMPLOYEES.map(emp => {
+      const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
+      const data = roster.map(emp => {
         const daysWorked = Math.floor(Math.random() * 5) + 21; // 21-26 days
         const dailyRate = emp.rate * (emp.shift === '12-hour' ? 12 : 9);
         const gross = dailyRate * daysWorked;
@@ -163,6 +466,283 @@ export function PayrollReports() {
       });
     }, 1000);
   };
+
+  if (isBonusViewActive) {
+    const orderedVisibleMonths = FY_MONTHS.filter(m => visibleMonths.includes(m));
+    return (
+      <div className="space-y-6 w-full animate-in fade-in duration-200">
+        {/* Full Page Header */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card/30 p-5 border border-border rounded-xl">
+          <div>
+            <h2 className="font-headline text-2xl font-bold flex items-center gap-2">
+              <Gift className="w-6 h-6 text-accent animate-pulse" />
+              12-Month Yearly Bonus Calculator (Spreadsheet View)
+            </h2>
+            <p className="text-muted-foreground text-xs mt-1">
+              Adjust percentages, drag-select months horizontally to toggle inclusion, and modify salaries directly in the spreadsheet grid below.
+            </p>
+          </div>
+          <Button 
+            variant="ghost" 
+            onClick={() => setIsBonusViewActive(false)} 
+            className="text-muted-foreground hover:text-foreground border border-border"
+          >
+            Back to Reports
+          </Button>
+        </div>
+
+        {/* Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-5 bg-card/20 border border-border rounded-xl">
+          <div className="space-y-1.5">
+            <Label htmlFor="ref-year" className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Reporting Year</Label>
+            <Select value={bonusRefYear} onValueChange={setBonusRefYear}>
+              <SelectTrigger id="ref-year" className="bg-background border-muted h-10 w-full">
+                <SelectValue placeholder="Year" />
+              </SelectTrigger>
+              <SelectContent>
+                {FY_YEARS.map(y => (
+                  <SelectItem key={y} value={y}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="global-pct" className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Global Bonus Percentage (%)</Label>
+            <div className="relative">
+              <Input 
+                id="global-pct"
+                type="number"
+                step="0.01"
+                value={bonusPercentage}
+                onChange={(e) => handleGlobalPercentageChange(Number(e.target.value) || 0)}
+                className="bg-background border-muted h-10 font-mono font-bold w-full pr-8"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono font-bold text-muted-foreground">%</span>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Visible Months</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full bg-background border-muted justify-between h-10 text-left font-normal">
+                  <span className="truncate">
+                    {visibleMonths.length === 12 
+                      ? "All Months Visible" 
+                      : `${visibleMonths.length} Months Selected`}
+                  </span>
+                  <TableIcon className="w-4 h-4 ml-2 opacity-50 shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-[200px] bg-card border-border max-h-[300px] overflow-y-auto z-40">
+                <DropdownMenuLabel className="text-xs uppercase font-bold text-muted-foreground">Toggle Months</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {FY_MONTHS.map(month => {
+                  const isVisible = visibleMonths.includes(month);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={month}
+                      checked={isVisible}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setVisibleMonths(prev => [...prev, month]);
+                        } else {
+                          if (visibleMonths.length > 1) {
+                            setVisibleMonths(prev => prev.filter(m => m !== month));
+                          } else {
+                            toast({
+                              variant: "destructive",
+                              title: "Cannot Hide All Months",
+                              description: "At least one month must be visible in the spreadsheet.",
+                            });
+                          }
+                        }
+                      }}
+                      className="text-xs cursor-pointer focus:bg-accent focus:text-accent-foreground"
+                    >
+                      {getMonthYearLabel(month, bonusRefYear)}
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Main Spreadsheet Area */}
+        <div className="border border-border bg-background/20 rounded-md p-4 flex flex-col overflow-hidden">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-[#f3f4f6] dark:bg-neutral-800 sticky top-0 z-20">
+                <tr className="text-left text-xs uppercase tracking-wider font-bold">
+                  <th className="p-2 text-gray-700 dark:text-gray-300 sticky left-0 bg-[#f3f4f6] dark:bg-neutral-800 z-30 border-r border-b border-gray-300 dark:border-neutral-700 w-[75px] min-w-[75px] text-center font-bold">S.NO</th>
+                  <th className="p-2 text-gray-700 dark:text-gray-300 sticky left-[75px] bg-[#f3f4f6] dark:bg-neutral-800 z-30 border-r border-b border-gray-300 dark:border-neutral-700 w-[160px] min-w-[160px] text-left font-bold">NAME</th>
+                  {orderedVisibleMonths.map(month => (
+                    <th key={month} className="p-2 text-gray-700 dark:text-gray-300 text-center min-w-[125px] w-[125px] border-r border-b border-gray-300 dark:border-neutral-700 font-bold">{getMonthYearLabel(month, bonusRefYear)}</th>
+                  ))}
+                  <th className="p-2 text-gray-700 dark:text-gray-300 text-right min-w-[110px] w-[110px] border-r border-b border-gray-300 dark:border-neutral-700 font-bold">TOTAL</th>
+                  <th className="p-2 text-gray-700 dark:text-gray-300 text-right min-w-[95px] w-[95px] border-r border-b border-gray-300 dark:border-neutral-700 font-bold">BONUS %</th>
+                  <th className="p-2 text-gray-700 dark:text-gray-300 text-right min-w-[120px] w-[120px] border-r border-b border-gray-300 dark:border-neutral-700 font-bold">BONUS AMOUNT</th>
+                  <th className="p-2 text-gray-700 dark:text-gray-300 text-right min-w-[110px] w-[110px] border-b border-gray-300 dark:border-neutral-700 font-bold">ROUND OFF</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bonusEntries.map((entry, index) => {
+                  const exactAmount = (entry.yearlySalary * entry.percentage) / 100;
+                  
+                  return (
+                    <tr 
+                      key={entry.id} 
+                      className={cn(
+                        "transition-all h-10 hover:bg-muted/10 group cursor-pointer"
+                      )}
+                    >
+                      <td className={cn(
+                        "p-2 font-mono text-xs text-center sticky left-0 z-10 border-r border-b border-gray-300 dark:border-neutral-700 transition-colors w-[75px] min-w-[75px]",
+                        "bg-card text-muted-foreground group-hover:bg-muted/30 dark:group-hover:bg-neutral-800/50"
+                      )}>
+                        {entry.id}
+                      </td>
+                      <td className={cn(
+                        "p-2 text-xs font-bold sticky left-[75px] z-10 border-r border-b border-gray-300 dark:border-neutral-700 transition-colors w-[160px] min-w-[160px] truncate",
+                        "bg-card text-foreground group-hover:bg-muted/30 dark:group-hover:bg-neutral-800/50"
+                      )}>
+                        {entry.name}
+                      </td>
+                      
+                      {/* 12 Months Cells */}
+                      {orderedVisibleMonths.map(month => {
+                        const mSalary = entry.monthlySalaries[month as keyof MonthlySalaries] || 0;
+                        const isIncluded = entry.includedMonths?.includes(month) ?? true;
+                        
+                        return (
+                          <td 
+                            key={month} 
+                            className={cn(
+                              "p-0.5 w-[125px] min-w-[125px] text-center border-r border-b border-gray-200 dark:border-neutral-800 transition-colors select-none",
+                              !isIncluded && "bg-muted/30 dark:bg-neutral-950/30",
+                              "group-hover:bg-muted/10 dark:group-hover:bg-neutral-900/30"
+                            )}
+                            onMouseDown={(e) => {
+                              if (e.target instanceof HTMLInputElement && e.target.type === 'number') {
+                                return;
+                              }
+                              if (e.button !== 0) return;
+                              handleMonthMouseDown(index, month, isIncluded);
+                            }}
+                            onMouseEnter={() => {
+                              handleMonthMouseEnter(index, month, isIncluded);
+                            }}
+                          >
+                            <div className="flex items-center gap-1 px-1.5 h-8">
+                              <Checkbox 
+                                id={`include-${month}-${entry.id}`}
+                                checked={isIncluded} 
+                                onCheckedChange={() => handleUpdateEntry(index, "toggleMonth", null, month as keyof MonthlySalaries)}
+                                className="border-muted-foreground/30 h-3.5 w-3.5 data-[state=checked]:bg-accent data-[state=checked]:border-accent shrink-0"
+                              />
+                              <Input 
+                                type="number"
+                                value={mSalary === 0 ? "" : mSalary}
+                                placeholder="0"
+                                disabled={!isIncluded}
+                                onChange={(e) => handleUpdateEntry(index, "monthlySalaries", Number(e.target.value) || 0, month as keyof MonthlySalaries)}
+                                className={cn(
+                                  "h-7 text-right font-mono text-xs w-full bg-transparent border border-transparent focus:border-primary/50 focus:bg-white dark:focus:bg-neutral-800 rounded-sm px-1.5 transition-all outline-none",
+                                  !isIncluded ? "text-muted-foreground/30 line-through decoration-destructive/30" : "text-foreground"
+                                )}
+                              />
+                            </div>
+                          </td>
+                        );
+                      })}
+                      
+                      {/* Total Yearly Salary */}
+                      <td className={cn(
+                        "p-2 text-right font-mono font-bold text-primary w-[110px] min-w-[110px] border-r border-b border-gray-200 dark:border-neutral-800/60 transition-colors",
+                        "bg-gray-50/50 dark:bg-neutral-900/10 group-hover:bg-muted/10 dark:group-hover:bg-neutral-900/30"
+                      )}>
+                        ₹{entry.yearlySalary.toLocaleString('en-IN')}
+                      </td>
+                      
+                      {/* Bonus Percentage */}
+                      <td className={cn(
+                        "p-0.5 w-[95px] min-w-[95px] border-r border-b border-gray-200 dark:border-neutral-800 transition-colors",
+                        "group-hover:bg-muted/10 dark:group-hover:bg-neutral-900/30"
+                      )}>
+                        <div className="relative flex items-center h-8 px-1">
+                          <Input 
+                            type="number"
+                            step="0.01"
+                            value={entry.percentage}
+                            onChange={(e) => handleUpdateEntry(index, "percentage", Number(e.target.value) || 0)}
+                            className="h-7 text-right font-mono w-full bg-transparent border border-transparent focus:border-primary/50 focus:bg-white dark:focus:bg-neutral-800 rounded-sm pr-4 text-xs transition-all outline-none"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 font-mono text-[9px] text-muted-foreground pointer-events-none">%</span>
+                        </div>
+                      </td>
+                      
+                      {/* Exact Calculated Bonus Amount (read-only) */}
+                      <td className={cn(
+                        "p-2 text-right font-mono text-muted-foreground text-xs w-[120px] min-w-[120px] border-r border-b border-gray-200 dark:border-neutral-800/60 transition-colors",
+                        "bg-gray-50/50 dark:bg-neutral-900/10 group-hover:bg-muted/10 dark:group-hover:bg-neutral-900/30"
+                      )}>
+                        ₹{exactAmount.toFixed(2)}
+                      </td>
+                      
+                      {/* Rounded / Round Off (manual override) */}
+                      <td className={cn(
+                        "p-0.5 w-[110px] min-w-[110px] border-b border-gray-200 dark:border-neutral-800/60 transition-colors",
+                        "group-hover:bg-muted/10 dark:group-hover:bg-neutral-900/30"
+                      )}>
+                        <div className="relative flex items-center h-8 px-1">
+                          <Input 
+                            type="number"
+                            value={entry.bonusAmount}
+                            onChange={(e) => handleUpdateEntry(index, "bonusAmount", Number(e.target.value) || 0)}
+                            className="h-7 text-right font-mono font-bold w-full bg-transparent border border-transparent focus:border-accent/50 focus:bg-white dark:focus:bg-neutral-800 rounded-sm text-accent text-xs transition-all outline-none"
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Footer Summary */}
+        <div className="p-5 bg-card/30 border border-border rounded-xl flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="text-sm font-bold uppercase tracking-wider">
+            Total Bonus Liability: <span className="text-xl font-headline font-black text-accent ml-2">₹{bonusEntries.reduce((sum, e) => sum + e.bonusAmount, 0).toLocaleString('en-IN')}</span>
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button 
+              variant="outline" 
+              onClick={handleDownloadBonusCSV}
+              className="border-border text-xs flex-1 sm:flex-initial"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Download CSV
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsBonusViewActive(false)}
+              className="border-border text-xs flex-1 sm:flex-initial"
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveBonuses}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs flex-1 sm:flex-initial"
+            >
+              Save & Close
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -462,12 +1042,12 @@ export function PayrollReports() {
                   <Gift className="w-6 h-6 text-accent" />
                   Yearly Bonus Calculator
                 </CardTitle>
-                <CardDescription>Compute 8.33% statutory bonus based on 12-month earnings.</CardDescription>
+                <CardDescription>Compute statutory bonus based on 12-month earnings.</CardDescription>
               </div>
               <Button 
                 variant="default" 
                 className="bg-accent text-accent-foreground hover:bg-accent/90"
-                onClick={() => toast({ title: "Calculator Running", description: "Processing historical payroll files..."})}
+                onClick={() => setIsBonusViewActive(true)}
               >
                 <Sparkles className="w-4 h-4 mr-2" />
                 Calculate Yearly Bonus

@@ -1,32 +1,148 @@
 
 "use client"
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Factory, Clock, IndianRupee, ShieldCheck, CalendarRange } from "lucide-react";
+import { Save, Factory, Clock, IndianRupee, ShieldCheck, CalendarRange, Download, Upload, Database, Trash2 } from "lucide-react";
 
-export function FactorySettings() {
+interface FactorySettingsProps {
+  config: {
+    companyName: string;
+    factoryUnit: string;
+    standardShiftHours: number;
+    factoryShiftHours: number;
+    defaultIncentive: number;
+    currency: string;
+    financialYear: string;
+  };
+  onSave: (newConfig: any) => void;
+}
+
+export function FactorySettings({ config: propConfig, onSave }: FactorySettingsProps) {
   const { toast } = useToast();
-  const [config, setConfig] = useState({
-    companyName: "ShiftWise Systems Ltd",
-    factoryUnit: "Unit #1 - Manufacturing",
-    standardShiftHours: 9,
-    factoryShiftHours: 12,
-    defaultIncentive: 100,
-    currency: "INR",
-    financialYear: "2024-25",
-  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [config, setConfig] = useState(propConfig);
+
+  // Sync internal state when prop changes (e.g. company switched)
+  useEffect(() => {
+    setConfig(propConfig);
+  }, [propConfig]);
 
   const handleSave = () => {
+    onSave(config);
     toast({
       title: "Settings Updated",
       description: `Factory configuration for FY ${config.financialYear} has been saved successfully.`,
     });
+  };
+
+  const handleDownloadBackup = () => {
+    try {
+      const backupData: Record<string, any> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (
+          key === "companies" ||
+          key === "active_company_id" ||
+          key.startsWith("config_") ||
+          key.startsWith("employees_") ||
+          key.startsWith("attendance_") ||
+          key === "factory_config" ||
+          key === "factory_employees" ||
+          key === "attendance_entries"
+        )) {
+          try {
+            backupData[key] = JSON.parse(localStorage.getItem(key)!);
+          } catch {
+            backupData[key] = localStorage.getItem(key);
+          }
+        }
+      }
+
+      const jsonString = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", url);
+      downloadAnchor.setAttribute("download", `shiftwise_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Backup Successful",
+        description: "Your complete database backup file has been generated and downloaded.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "Backup Failed",
+        description: "An error occurred while compiling your backup file.",
+      });
+    }
+  };
+
+  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsedData = JSON.parse(event.target?.result as string);
+        
+        // Ensure it's a valid backup file
+        if (!parsedData.companies && !parsedData.factory_config && !parsedData.config_default) {
+          throw new Error("Invalid backup file format");
+        }
+
+        // Restore all keys to localStorage
+        Object.entries(parsedData).forEach(([key, val]) => {
+          if (typeof val === "string") {
+            localStorage.setItem(key, val);
+          } else {
+            localStorage.setItem(key, JSON.stringify(val));
+          }
+        });
+
+        toast({
+          title: "Backup Restored",
+          description: "All records and configurations have been successfully restored.",
+        });
+
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } catch (error) {
+        console.error(error);
+        toast({
+          variant: "destructive",
+          title: "Restore Failed",
+          description: "Invalid backup file format. Please check the file and try again.",
+        });
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleWipeData = () => {
+    if (confirm("Are you sure you want to completely wipe all local data? This action cannot be undone.")) {
+      localStorage.clear();
+      toast({
+        title: "Data Wiped",
+        description: "All local data has been completely removed.",
+      });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
   };
 
   return (
@@ -182,6 +298,52 @@ export function FactorySettings() {
                 <Save className="w-4 h-4 mr-2" />
                 Save Changes
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card/30 border-border">
+            <CardHeader>
+              <CardTitle className="font-headline flex items-center gap-2 text-md">
+                <Database className="w-5 h-5 text-accent" />
+                Backup & Recovery
+              </CardTitle>
+              <CardDescription>Export or import all factory payroll and employee data.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button 
+                onClick={handleDownloadBackup} 
+                variant="outline" 
+                className="w-full border-border hover:bg-accent/5 justify-start"
+              >
+                <Download className="w-4 h-4 mr-2 text-accent" />
+                Download Data Backup (.json)
+              </Button>
+              
+              <Button 
+                onClick={() => fileInputRef.current?.click()} 
+                variant="outline" 
+                className="w-full border-border hover:bg-accent/5 justify-start"
+              >
+                <Upload className="w-4 h-4 mr-2 text-primary" />
+                Restore Data Backup (.json)
+              </Button>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleRestoreBackup} 
+                accept=".json" 
+                className="hidden" 
+              />
+              <div className="pt-2">
+                <Button 
+                  onClick={handleWipeData} 
+                  variant="destructive" 
+                  className="w-full justify-start bg-red-950/40 text-red-500 hover:bg-red-900/60 border border-red-900/50"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Wipe All Local Data
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

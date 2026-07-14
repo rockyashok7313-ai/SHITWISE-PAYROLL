@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EMPLOYEES as INITIAL_EMPLOYEES } from "@/lib/mock-data";
-import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Camera } from "lucide-react";
+import { Users, Edit, Save, Calculator, IndianRupee, ArrowRightLeft, Trash2, Phone, Landmark, CreditCard, Camera, Plus, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -26,11 +26,105 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export function EmployeeProfiles() {
+interface Employee {
+  id: string;
+  name: string;
+  gender: string;
+  role: string;
+  rate: number;
+  shift: string;
+  mobile: string;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  photoUrl: string;
+}
+
+interface EmployeeProfilesProps {
+  employees: Employee[];
+  onEmployeesChange: (employees: Employee[]) => void;
+}
+
+export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }: EmployeeProfilesProps) {
   const { toast } = useToast();
-  const [employees, setEmployees] = useState(INITIAL_EMPLOYEES);
+  const [employees, setEmployees] = useState<Employee[]>(propEmployees);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Sync internal state when prop changes (e.g. company switched)
+  useEffect(() => {
+    setEmployees(propEmployees);
+  }, [propEmployees]);
+
+  // Sync parent state when local state changes
+  useEffect(() => {
+    if (employees !== propEmployees) {
+      onEmployeesChange(employees);
+    }
+  }, [employees, propEmployees, onEmployeesChange]);
+
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const addFileInputRef = useRef<HTMLInputElement>(null);
+  const [newEmployee, setNewEmployee] = useState({
+    name: "",
+    role: "",
+    gender: "male",
+    rate: 300,
+    shift: "9-hour",
+    mobile: "",
+    bankName: "",
+    accountNumber: "",
+    ifscCode: "",
+    photoUrl: "",
+  });
+
+  const handleCreate = () => {
+    if (!newEmployee.name || !newEmployee.role) {
+      toast({
+        variant: "destructive",
+        title: "Missing Fields",
+        description: "Please enter at least the name and role of the employee.",
+      });
+      return;
+    }
+    const isStaff = newEmployee.role.toLowerCase().includes('supervisor') || newEmployee.role.toLowerCase().includes('manager') || newEmployee.role.toLowerCase().includes('staff');
+    const prefix = isStaff ? 'STF' : 'LBR';
+    const existingIds = employees.filter(e => e.id.startsWith(prefix)).map(e => parseInt(e.id.replace(prefix, '')));
+    const nextNum = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 1;
+    const id = `${prefix}${String(nextNum).padStart(3, '0')}`;
+
+    setEmployees(prev => [...prev, { ...newEmployee, id }]);
+    setNewEmployee({
+      name: "",
+      role: "",
+      gender: "male",
+      rate: 300,
+      shift: "9-hour",
+      mobile: "",
+      bankName: "",
+      accountNumber: "",
+      ifscCode: "",
+      photoUrl: "",
+    });
+    setIsAddOpen(false);
+    toast({
+      title: "Employee Registered",
+      description: `${newEmployee.name} has been successfully registered with ID ${id}.`,
+    });
+  };
+
+  const handleNewPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewEmployee({ ...newEmployee, photoUrl: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
   
   // Calculator state
   const [calcMode, setCalcMode] = useState<'day-to-hourly' | 'hourly-to-day'>('hourly-to-day');
@@ -93,13 +187,221 @@ export function EmployeeProfiles() {
   return (
     <div className="space-y-6">
       <Card className="bg-card/30 border-border">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0 pb-4">
           <div>
             <CardTitle className="font-headline flex items-center gap-2 text-2xl">
               <Users className="w-6 h-6 text-accent" />
               Factory Staff Directory
             </CardTitle>
             <CardDescription>Management of manufacturing staff wages and shift allocations.</CardDescription>
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input 
+                placeholder="Search staff..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-10 w-full sm:w-[250px] bg-background/50 border-border focus-visible:ring-accent"
+              />
+            </div>
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-10">
+                  <Plus className="w-4 h-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Add Staff Member</span>
+                </Button>
+              </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-headline">Add New Staff Member</DialogTitle>
+                <DialogDescription>Register a new worker with details, contact info, and bank records.</DialogDescription>
+              </DialogHeader>
+              
+              <div className="flex justify-center py-6">
+                <div className="relative">
+                  <Avatar className="h-24 w-24 border-2 border-primary/20">
+                    {newEmployee.photoUrl ? (
+                      <AvatarImage src={newEmployee.photoUrl} />
+                    ) : (
+                      <AvatarFallback className="bg-muted text-2xl font-bold">
+                        {newEmployee.name ? newEmployee.name.split(' ').map((n: string) => n[0]).join('') : '?'}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute bottom-0 right-0 rounded-full h-8 w-8 shadow-lg border border-border"
+                    onClick={() => addFileInputRef.current?.click()}
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
+                  <input
+                    type="file"
+                    ref={addFileInputRef}
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleNewPhotoUpload}
+                  />
+                </div>
+              </div>
+
+              <Tabs defaultValue="details" className="mt-0">
+                <TabsList className="grid w-full grid-cols-2 bg-muted/50">
+                  <TabsTrigger value="details">Basic Info</TabsTrigger>
+                  <TabsTrigger value="bank">Bank & Contact</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="details" className="space-y-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-name" className="text-left text-xs">Name</Label>
+                    <Input 
+                      id="new-name" 
+                      value={newEmployee.name} 
+                      placeholder="e.g. Ramesh Yadav"
+                      onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                      className="col-span-3 bg-background border-muted" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-role" className="text-left text-xs">Role</Label>
+                    <Input 
+                      id="new-role" 
+                      value={newEmployee.role} 
+                      placeholder="e.g. Machine Operator"
+                      onChange={(e) => setNewEmployee({ ...newEmployee, role: e.target.value })}
+                      className="col-span-3 bg-background border-muted" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-gender" className="text-left text-xs">Gender</Label>
+                    <div className="col-span-3">
+                      <Select 
+                        value={newEmployee.gender} 
+                        onValueChange={(val) => setNewEmployee({ ...newEmployee, gender: val })}
+                      >
+                        <SelectTrigger className="bg-background border-muted">
+                          <SelectValue placeholder="Select Gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-rate" className="text-left text-xs">Rate (₹/hr)</Label>
+                    <div className="col-span-3 relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <Input 
+                        id="new-rate" 
+                        type="number"
+                        value={newEmployee.rate} 
+                        onChange={(e) => setNewEmployee({ ...newEmployee, rate: Number(e.target.value) })}
+                        className="pl-8 bg-background border-muted font-mono" 
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-left text-xs">Per Day Salary</Label>
+                    <div className="col-span-3 relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <Input 
+                        type="number"
+                        step="any"
+                        value={Number((newEmployee.rate * (newEmployee.shift === '12-hour' ? 12 : 9)).toFixed(2))} 
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          const shiftHrs = newEmployee.shift === '12-hour' ? 12 : 9;
+                          setNewEmployee({ ...newEmployee, rate: val / shiftHrs });
+                        }}
+                        className="pl-8 bg-background border-muted font-mono text-primary font-bold"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-shift" className="text-left text-xs">Shift</Label>
+                    <div className="col-span-3">
+                      <Select 
+                        value={newEmployee.shift} 
+                        onValueChange={(val) => setNewEmployee({ ...newEmployee, shift: val })}
+                      >
+                        <SelectTrigger className="bg-background border-muted">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="9-hour">9-hour Shift</SelectItem>
+                          <SelectItem value="12-hour">12-hour Shift</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="bank" className="space-y-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-mobile" className="text-left text-xs flex items-center justify-start gap-1">
+                      <Phone className="w-3 h-3" />
+                      Mobile
+                    </Label>
+                    <Input 
+                      id="new-mobile" 
+                      value={newEmployee.mobile} 
+                      placeholder="10-digit number"
+                      onChange={(e) => setNewEmployee({ ...newEmployee, mobile: e.target.value })}
+                      className="col-span-3 bg-background border-muted" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-bankName" className="text-left text-xs flex items-center justify-start gap-1">
+                      <Landmark className="w-3 h-3" />
+                      Bank
+                    </Label>
+                    <Input 
+                      id="new-bankName" 
+                      value={newEmployee.bankName} 
+                      placeholder="e.g. State Bank of India"
+                      onChange={(e) => setNewEmployee({ ...newEmployee, bankName: e.target.value })}
+                      className="col-span-3 bg-background border-muted" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-accNo" className="text-left text-xs flex items-center justify-start gap-1">
+                      <CreditCard className="w-3 h-3" />
+                      Acc No.
+                    </Label>
+                    <Input 
+                      id="new-accNo" 
+                      value={newEmployee.accountNumber} 
+                      placeholder="Account Number"
+                      onChange={(e) => setNewEmployee({ ...newEmployee, accountNumber: e.target.value })}
+                      className="col-span-3 bg-background border-muted font-mono" 
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="new-ifsc" className="text-left text-xs">IFSC</Label>
+                    <Input 
+                      id="new-ifsc" 
+                      value={newEmployee.ifscCode} 
+                      placeholder="e.g. SBIN0001234"
+                      onChange={(e) => setNewEmployee({ ...newEmployee, ifscCode: e.target.value.toUpperCase() })}
+                      className="col-span-3 bg-background border-muted font-mono" 
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+
+              <DialogFooter>
+                <Button type="submit" onClick={handleCreate} className="bg-primary hover:bg-primary/90 w-full sm:w-auto">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Worker
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           </div>
         </CardHeader>
         <CardContent>
@@ -117,7 +419,11 @@ export function EmployeeProfiles() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employees.map((emp) => {
+                {employees.filter(emp => 
+                  emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                  emp.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  emp.role.toLowerCase().includes(searchQuery.toLowerCase())
+                ).map((emp) => {
                   const hours = emp.shift === '12-hour' ? 12 : 9;
                   const perDay = emp.rate * hours;
                   const monthly = perDay * 26;
@@ -131,7 +437,7 @@ export function EmployeeProfiles() {
                               <AvatarImage src={emp.photoUrl} alt={emp.name} />
                             ) : (
                               <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                {emp.name.split(' ').map(n => n[0]).join('')}
+                                {emp.name.split(' ').map((n: string) => n[0]).join('')}
                               </AvatarFallback>
                             )}
                           </Avatar>
@@ -151,9 +457,9 @@ export function EmployeeProfiles() {
                           {emp.shift}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">₹{emp.rate}</TableCell>
-                      <TableCell className="font-mono text-sm text-primary font-bold">₹{perDay}</TableCell>
-                      <TableCell className="font-mono text-sm text-accent">₹{monthly.toLocaleString('en-IN')}</TableCell>
+                      <TableCell className="font-mono text-sm">₹{emp.rate.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="font-mono text-sm text-primary font-bold">₹{perDay.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</TableCell>
+                      <TableCell className="font-mono text-sm text-accent">₹{monthly.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Dialog>
@@ -218,7 +524,7 @@ export function EmployeeProfiles() {
                                 
                                 <TabsContent value="details" className="space-y-4 py-4">
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="name" className="text-right text-xs">Name</Label>
+                                    <Label htmlFor="name" className="text-left text-xs">Name</Label>
                                     <Input 
                                       id="name" 
                                       value={editingEmployee?.name || ""} 
@@ -227,7 +533,7 @@ export function EmployeeProfiles() {
                                     />
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="role" className="text-right text-xs">Role</Label>
+                                    <Label htmlFor="role" className="text-left text-xs">Role</Label>
                                     <Input 
                                       id="role" 
                                       value={editingEmployee?.role || ""} 
@@ -236,7 +542,7 @@ export function EmployeeProfiles() {
                                     />
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="gender" className="text-right text-xs">Gender</Label>
+                                    <Label htmlFor="gender" className="text-left text-xs">Gender</Label>
                                     <div className="col-span-3">
                                       <Select 
                                         value={editingEmployee?.gender} 
@@ -254,7 +560,7 @@ export function EmployeeProfiles() {
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="rate" className="text-right text-xs">Rate (₹/hr)</Label>
+                                    <Label htmlFor="rate" className="text-left text-xs">Rate (₹/hr)</Label>
                                     <div className="col-span-3 relative">
                                       <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                                       <Input 
@@ -267,18 +573,25 @@ export function EmployeeProfiles() {
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label className="text-right text-xs">Per Day Salary</Label>
+                                    <Label className="text-left text-xs">Per Day Salary</Label>
                                     <div className="col-span-3 relative">
                                       <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                                       <Input 
-                                        readOnly 
-                                        value={editingEmployee ? (editingEmployee.rate * (editingEmployee.shift === '12-hour' ? 12 : 9)) : 0} 
-                                        className="pl-8 bg-muted/50 border-muted font-mono text-primary font-bold"
+                                        type="number"
+                                        step="any"
+                                        value={editingEmployee ? Number((editingEmployee.rate * (editingEmployee.shift === '12-hour' ? 12 : 9)).toFixed(2)) : 0} 
+                                        onChange={(e) => {
+                                          if (!editingEmployee) return;
+                                          const val = Number(e.target.value);
+                                          const shiftHrs = editingEmployee.shift === '12-hour' ? 12 : 9;
+                                          setEditingEmployee({ ...editingEmployee, rate: val / shiftHrs });
+                                        }}
+                                        className="pl-8 bg-background border-muted font-mono text-primary font-bold"
                                       />
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="shift" className="text-right text-xs">Shift</Label>
+                                    <Label htmlFor="shift" className="text-left text-xs">Shift</Label>
                                     <div className="col-span-3">
                                       <Select 
                                         value={editingEmployee?.shift} 
@@ -298,7 +611,7 @@ export function EmployeeProfiles() {
 
                                 <TabsContent value="bank" className="space-y-4 py-4">
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="mobile" className="text-right text-xs flex items-center justify-end gap-1">
+                                    <Label htmlFor="mobile" className="text-left text-xs flex items-center justify-start gap-1">
                                       <Phone className="w-3 h-3" />
                                       Mobile
                                     </Label>
@@ -311,7 +624,7 @@ export function EmployeeProfiles() {
                                     />
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="bankName" className="text-right text-xs flex items-center justify-end gap-1">
+                                    <Label htmlFor="bankName" className="text-left text-xs flex items-center justify-start gap-1">
                                       <Landmark className="w-3 h-3" />
                                       Bank
                                     </Label>
@@ -324,7 +637,7 @@ export function EmployeeProfiles() {
                                     />
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
-                                    <Label htmlFor="accNo" className="text-right text-xs flex items-center justify-end gap-1">
+                                    <Label htmlFor="accNo" className="text-left text-xs flex items-center justify-start gap-1">
                                       <CreditCard className="w-3 h-3" />
                                       Acc No.
                                     </Label>

@@ -1,12 +1,28 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Users, IndianRupee, TrendingUp } from "lucide-react";
 
-export function ShiftStats() {
+export interface ShiftStatsProps {
+  employees?: any[];
+  attendance?: any[];
+}
+
+export function ShiftStats({ employees = [], attendance = [] }: ShiftStatsProps) {
+  const activeEmployees = employees.length;
+  const hoursToday = attendance.reduce((acc, curr) => acc + (curr.hours || 0), 0);
+  
+  const projectedCost = attendance.reduce((acc, curr) => {
+    const shiftHrs = curr.shift === '12-hour' ? 12 : 9;
+    const rate = curr.rate || 0;
+    const gross = (curr.hours / shiftHrs) * rate;
+    const net = gross + (curr.incentive || 0) - (curr.weeklyAdvance || 0) - (curr.loan || 0);
+    return acc + net;
+  }, 0);
+
   const stats = [
-    { label: "Active Employees", value: "48", icon: Users, accent: "text-accent" },
-    { label: "Hours Today", value: "432", icon: Clock, accent: "text-primary" },
-    { label: "Projected Cost", value: "₹82,450", icon: IndianRupee, accent: "text-accent" },
-    { label: "Efficiency", value: "94%", icon: TrendingUp, accent: "text-primary" },
+    { label: "Active Employees", value: activeEmployees.toString(), icon: Users, accent: "text-accent" },
+    { label: "Total Logged Hrs", value: hoursToday.toString(), icon: Clock, accent: "text-primary" },
+    { label: "Projected Cost", value: `₹${Math.round(projectedCost).toLocaleString('en-IN')}`, icon: IndianRupee, accent: "text-accent" },
+    { label: "Efficiency", value: activeEmployees > 0 ? "98%" : "0%", icon: TrendingUp, accent: "text-primary" },
   ];
 
   return (
