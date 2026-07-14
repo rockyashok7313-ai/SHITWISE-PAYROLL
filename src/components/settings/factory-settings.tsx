@@ -112,6 +112,33 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
           description: "Uploading data to cloud database. Please do not close this window.",
         });
 
+        // --- CORRUPTION AUTO-FIX ---
+        // Some older backups have mismatched company IDs (e.g. company id is 'default', but employees key is 'employees_co_123')
+        // If we only have ONE company in the backup, force all employees/attendance to map to that company ID.
+        let comps = parsedData.companies_cache || parsedData.companies;
+        if (comps && Array.isArray(comps) && comps.length === 1) {
+          const actualCompanyId = comps[0].id;
+          
+          for (const key of Object.keys(parsedData)) {
+            if (key.startsWith('employees_')) {
+               const oldId = key.replace('employees_', '');
+               if (oldId !== actualCompanyId) {
+                 parsedData[`employees_${actualCompanyId}`] = parsedData[key];
+                 delete parsedData[key];
+                 console.log(`Auto-fixed corrupted employee key from ${key} to employees_${actualCompanyId}`);
+               }
+            } else if (key.startsWith('attendance_')) {
+               const oldId = key.replace('attendance_', '');
+               if (oldId !== actualCompanyId) {
+                 parsedData[`attendance_${actualCompanyId}`] = parsedData[key];
+                 delete parsedData[key];
+                 console.log(`Auto-fixed corrupted attendance key from ${key} to attendance_${actualCompanyId}`);
+               }
+            }
+          }
+        }
+        // --- END CORRUPTION AUTO-FIX ---
+
         // 1. Restore all keys to localStorage FIRST so data is never lost
         for (const [key, val] of Object.entries(parsedData)) {
           if (typeof val === "string") {
@@ -123,20 +150,18 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
 
         // 2. Try to sync to Supabase, but don't fail the local restore if it errors
         try {
-          if (parsedData.companies_cache || parsedData.companies) {
-            const comps = parsedData.companies_cache || parsedData.companies;
-            if (Array.isArray(comps) && comps.length > 0) {
-              await supabase.from('companies').upsert(comps.map((c: any) => ({
-                id: c.id,
-                name: c.name,
-                unit: c.unit,
-                standard_shift_hours: c.standardShiftHours || 9,
-                factory_shift_hours: c.factoryShiftHours || 12,
-                default_incentive: c.defaultIncentive || 100,
-                currency: c.currency || "INR",
-                financial_year: c.financialYear || "2026-27"
-              })));
-            }
+          let comps = parsedData.companies_cache || parsedData.companies;
+          if (comps && Array.isArray(comps) && comps.length > 0) {
+            await supabase.from('companies').upsert(comps.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              unit: c.unit,
+              standard_shift_hours: c.standardShiftHours || 9,
+              factory_shift_hours: c.factoryShiftHours || 12,
+              default_incentive: c.defaultIncentive || 100,
+              currency: c.currency || "INR",
+              financial_year: c.financialYear || "2026-27"
+            })));
           }
 
           for (const [key, val] of Object.entries(parsedData)) {
