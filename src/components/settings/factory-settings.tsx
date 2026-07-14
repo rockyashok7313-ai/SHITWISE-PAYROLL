@@ -113,28 +113,40 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
         });
 
         // --- CORRUPTION AUTO-FIX ---
-        // Some older backups have mismatched company IDs (e.g. company id is 'default', but employees key is 'employees_co_123')
-        // If we only have ONE company in the backup, force all employees/attendance to map to that company ID.
         let comps = parsedData.companies_cache || parsedData.companies;
-        if (comps && Array.isArray(comps) && comps.length === 1) {
-          const actualCompanyId = comps[0].id;
-          
-          for (const key of Object.keys(parsedData)) {
-            if (key.startsWith('employees_')) {
-               const oldId = key.replace('employees_', '');
-               if (oldId !== actualCompanyId) {
-                 parsedData[`employees_${actualCompanyId}`] = parsedData[key];
-                 delete parsedData[key];
-                 console.log(`Auto-fixed corrupted employee key from ${key} to employees_${actualCompanyId}`);
-               }
-            } else if (key.startsWith('attendance_')) {
-               const oldId = key.replace('attendance_', '');
-               if (oldId !== actualCompanyId) {
-                 parsedData[`attendance_${actualCompanyId}`] = parsedData[key];
-                 delete parsedData[key];
-                 console.log(`Auto-fixed corrupted attendance key from ${key} to attendance_${actualCompanyId}`);
-               }
+        
+        // Find the real company ID from the employees_ keys
+        let realCompanyId = null;
+        for (const key of Object.keys(parsedData)) {
+          if (key.startsWith('employees_')) {
+            const potentialId = key.replace('employees_', '');
+            if (potentialId !== 'default' && potentialId.startsWith('co_')) {
+              realCompanyId = potentialId;
+              break;
             }
+          }
+        }
+
+        if (comps && Array.isArray(comps) && comps.length === 1 && realCompanyId) {
+          const currentId = comps[0].id;
+          if (currentId !== realCompanyId) {
+             console.log(`Auto-fixing corrupted company ID from ${currentId} to ${realCompanyId}`);
+             comps[0].id = realCompanyId;
+             
+             // Also fix active_company_id if it's there
+             if (parsedData.active_company_id === currentId) {
+                parsedData.active_company_id = realCompanyId;
+             }
+             
+             // Move any 'default' keys to the new real ID
+             if (parsedData[`employees_${currentId}`]) {
+                parsedData[`employees_${realCompanyId}`] = parsedData[`employees_${currentId}`];
+                delete parsedData[`employees_${currentId}`];
+             }
+             if (parsedData[`attendance_${currentId}`]) {
+                parsedData[`attendance_${realCompanyId}`] = parsedData[`attendance_${currentId}`];
+                delete parsedData[`attendance_${currentId}`];
+             }
           }
         }
         // --- END CORRUPTION AUTO-FIX ---
