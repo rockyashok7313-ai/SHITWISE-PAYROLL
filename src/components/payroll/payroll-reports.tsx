@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -439,6 +439,48 @@ export function PayrollReports({ activeFinancialYear, employees, attendance }: P
     }
   };
 
+  const handleSendWhatsApp = () => {
+    if (!selectedEmployeeForSlip) {
+      toast({
+        variant: "destructive",
+        title: "No Employee Selected",
+        description: "Please select an employee to send their salary slip.",
+      });
+      return;
+    }
+
+    const emp = selectedEmployeeForSlip;
+    const mobile = emp.mobile?.replace(/\D/g, '') || '';
+    
+    if (mobile.length < 10) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Mobile Number",
+        description: `${emp.name} does not have a valid mobile number on file.`,
+      });
+      return;
+    }
+
+    // Format the mobile number for India if it doesn't have a country code
+    const waNumber = mobile.length === 10 ? `91${mobile}` : mobile;
+
+    const message = `Hello ${emp.name},
+Here is your salary summary for ${selectedMonth} ${selectedYear}:
+
+- Total Days: ${emp.daysWorked} Days
+- Base Salary: ₹${emp.gross.toLocaleString('en-IN')}
+- Incentives: +₹${emp.incentive.toLocaleString('en-IN')}
+- Deductions: -₹${emp.deductions.toLocaleString('en-IN')}
+--------------------------------
+NET PAYOUT: ₹${emp.net.toLocaleString('en-IN')}
+--------------------------------
+
+Please contact HR if you have any questions.`;
+
+    const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
+  };
+
   const generateMonthlyReport = () => {
     setIsGenerating(true);
     setTimeout(() => {
@@ -824,6 +866,17 @@ export function PayrollReports({ activeFinancialYear, employees, attendance }: P
             <Printer className="w-4 h-4 mr-2" />
             Print View
           </Button>
+          {selectedEmployeeForSlip && (
+            <Button 
+              variant="default" 
+              size="sm" 
+              onClick={handleSendWhatsApp} 
+              className="bg-[#25D366] hover:bg-[#25D366]/90 text-white"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              WhatsApp
+            </Button>
+          )}
         </div>
       </div>
 
