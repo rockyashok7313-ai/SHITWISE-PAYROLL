@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   FileSpreadsheet, 
   Settings,
-  Plus
+  Plus,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -134,6 +135,18 @@ export function SidebarNav({
         >
           <Settings className="w-4 h-4" />
           <span className="text-sm font-medium">Settings</span>
+        </Button>
+        <Button 
+          variant="ghost" 
+          onClick={async () => {
+            const { supabase } = await import('@/lib/supabase');
+            await supabase.auth.signOut();
+            window.location.href = '/login';
+          }}
+          className="w-full justify-start gap-3 h-11 mt-2 text-red-500/80 hover:bg-red-500/10 hover:text-red-500 transition-all"
+        >
+          <LogOut className="w-4 h-4" />
+          <span className="text-sm font-medium">Log Out</span>
         </Button>
       </div>
 

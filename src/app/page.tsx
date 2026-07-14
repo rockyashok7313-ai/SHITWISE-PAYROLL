@@ -15,9 +15,13 @@ import { Badge } from "@/components/ui/badge";
 import { Clock, ShieldCheck, History, Users, FileSpreadsheet, LayoutDashboard, Settings } from "lucide-react";
 import { ATTENDANCE_RECORDS, EMPLOYEES } from "@/lib/mock-data";
 import { Toaster } from "@/components/ui/toaster";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<TabValue>("dashboard");
 
   // Companies List and Active Company ID
@@ -42,6 +46,12 @@ export default function Home() {
   // Load data from Supabase
   useEffect(() => {
     const loadData = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/login');
+        return;
+      }
+      
       const { data: dbCompanies, error: compErr } = await supabase.from('companies').select('*');
       let parsedCompanies = [];
       
@@ -49,6 +59,74 @@ export default function Home() {
         const localComp = localStorage.getItem('companies_cache');
         if (localComp) parsedCompanies = JSON.parse(localComp);
       } else {
+        if (dbCompanies.length === 0) {
+          const localComp = localStorage.getItem('companies_cache');
+          if (localComp) {
+            try {
+              const parsedLocal = JSON.parse(localComp);
+              if (parsedLocal.length > 0) {
+                // Migrate companies
+                await supabase.from('companies').upsert(parsedLocal.map((c: any) => ({
+                  id: c.id,
+                  name: c.name,
+                  unit: c.unit,
+                  standard_shift_hours: c.standardShiftHours || 9,
+                  factory_shift_hours: c.factoryShiftHours || 12,
+                  default_incentive: c.defaultIncentive || 100,
+                  currency: c.currency || "INR",
+                  financial_year: c.financialYear || "2026-27"
+                })));
+                
+                // Migrate employees and attendance
+                for (const comp of parsedLocal) {
+                  const localEmp = localStorage.getItem(`employees_${comp.id}`);
+                  if (localEmp) {
+                    const emps = JSON.parse(localEmp);
+                    if (emps.length > 0) {
+                      await supabase.from('employees').upsert(emps.map((e: any) => ({
+                        id: e.id,
+                        company_id: comp.id,
+                        name: e.name,
+                        role: e.role,
+                        shift: e.shift,
+                        rate: e.rate,
+                        status: e.status
+                      })));
+                    }
+                  }
+                  
+                  const localAtt = localStorage.getItem(`attendance_${comp.id}`);
+                  if (localAtt) {
+                    const atts = JSON.parse(localAtt);
+                    if (atts.length > 0) {
+                      await supabase.from('attendance').upsert(atts.map((a: any) => ({
+                        id: a.id,
+                        company_id: comp.id,
+                        employee_id: a.employeeRefId,
+                        date: a.date,
+                        shift: a.shift,
+                        hours: a.hours,
+                        rate: a.rate,
+                        incentive: a.incentive || 0,
+                        weekly_advance: a.weeklyAdvance || 0,
+                        loan: a.loan || 0,
+                        is_modified: a.isModified
+                      })));
+                    }
+                  }
+                }
+                
+                // Refetch migrated data
+                const { data: migratedCompanies } = await supabase.from('companies').select('*');
+                if (migratedCompanies && migratedCompanies.length > 0) {
+                  dbCompanies.push(...migratedCompanies);
+                }
+              }
+            } catch (e) {
+              console.error("Migration failed", e);
+            }
+          }
+        }
         parsedCompanies = dbCompanies;
         localStorage.setItem('companies_cache', JSON.stringify(parsedCompanies));
       }
@@ -72,12 +150,12 @@ export default function Home() {
         activeId = newId;
         localStorage.setItem("active_company_id", activeId);
         localStorage.setItem('companies_cache', JSON.stringify(parsedCompanies));
-      } else if (!activeId || !parsedCompanies.find(c => c.id === activeId)) {
+      } else if (!activeId || !parsedCompanies.find((c: any) => c.id === activeId)) {
         activeId = parsedCompanies[0].id;
         localStorage.setItem("active_company_id", activeId);
       }
 
-      const mappedCompanies = parsedCompanies.map(c => ({
+      const mappedCompanies = parsedCompanies.map((c: any) => ({
         id: c.id,
         name: c.name,
         unit: c.unit,
@@ -91,7 +169,7 @@ export default function Home() {
       setCompanies(mappedCompanies);
       setActiveCompanyId(activeId);
 
-      const activeConfig = parsedCompanies.find(c => c.id === activeId) || parsedCompanies[0];
+      const activeConfig = parsedCompanies.find((c: any) => c.id === activeId) || parsedCompanies[0];
       setConfig({
         companyName: activeConfig.name,
         factoryUnit: activeConfig.unit,
@@ -125,11 +203,52 @@ export default function Home() {
         setAttendance(mappedAtt);
         localStorage.setItem(`attendance_${activeId}`, JSON.stringify(mappedAtt));
       }
+      // Auto Backup Logic
+      const lastBackup = localStorage.getItem('last_auto_backup_date');
+      const today = new Date().toISOString().split('T')[0];
+      if (lastBackup !== today) {
+        setTimeout(() => {
+          try {
+            const backupData: Record<string, any> = {};
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (
+                key === "companies_cache" ||
+                key === "active_company_id" ||
+                key.startsWith("employees_") ||
+                key.startsWith("attendance_")
+              )) {
+                try {
+                  backupData[key] = JSON.parse(localStorage.getItem(key)!);
+                } catch {
+                  backupData[key] = localStorage.getItem(key);
+                }
+              }
+            }
+            if (Object.keys(backupData).length > 0) {
+              const jsonString = JSON.stringify(backupData, null, 2);
+              const blob = new Blob([jsonString], { type: "application/json" });
+              const url = URL.createObjectURL(blob);
+              const downloadAnchor = document.createElement("a");
+              downloadAnchor.setAttribute("href", url);
+              downloadAnchor.setAttribute("download", `shiftwise_autobackup_${today}.json`);
+              document.body.appendChild(downloadAnchor);
+              downloadAnchor.click();
+              document.body.removeChild(downloadAnchor);
+              URL.revokeObjectURL(url);
+              localStorage.setItem('last_auto_backup_date', today);
+            }
+          } catch (e) {
+            console.error("Auto backup failed", e);
+          }
+        }, 5000); // Wait 5 seconds after load to not disrupt UX
+      }
+
       setLoading(false);
     };
 
     loadData();
-  }, []);
+  }, [router]);
 
   const handleSwitchCompany = async (id: string) => {
     if (!id) return;

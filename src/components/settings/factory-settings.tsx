@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Save, Factory, Clock, IndianRupee, ShieldCheck, CalendarRange, Download, Upload, Database, Trash2 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 interface FactorySettingsProps {
   config: {
@@ -48,6 +49,7 @@ export function FactorySettings({ config: propConfig, onSave }: FactorySettingsP
         const key = localStorage.key(i);
         if (key && (
           key === "companies" ||
+          key === "companies_cache" ||
           key === "active_company_id" ||
           key.startsWith("config_") ||
           key.startsWith("employees_") ||
@@ -89,32 +91,84 @@ export function FactorySettings({ config: propConfig, onSave }: FactorySettingsP
     }
   };
 
-  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRestoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const parsedData = JSON.parse(event.target?.result as string);
         
         // Ensure it's a valid backup file
-        if (!parsedData.companies && !parsedData.factory_config && !parsedData.config_default) {
+        if (!parsedData.companies && !parsedData.companies_cache && !parsedData.factory_config && !parsedData.config_default && !parsedData.active_company_id && !Object.keys(parsedData).some(k => k.startsWith('employees_'))) {
           throw new Error("Invalid backup file format");
         }
 
-        // Restore all keys to localStorage
-        Object.entries(parsedData).forEach(([key, val]) => {
+        toast({
+          title: "Restoring...",
+          description: "Uploading data to cloud database. Please do not close this window.",
+        });
+
+        // If they have companies_cache, try to upload to Supabase
+        if (parsedData.companies_cache || parsedData.companies) {
+          const comps = parsedData.companies_cache || parsedData.companies;
+          if (Array.isArray(comps) && comps.length > 0) {
+            await supabase.from('companies').upsert(comps.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              unit: c.unit,
+              standard_shift_hours: c.standardShiftHours || 9,
+              factory_shift_hours: c.factoryShiftHours || 12,
+              default_incentive: c.defaultIncentive || 100,
+              currency: c.currency || "INR",
+              financial_year: c.financialYear || "2026-27"
+            })));
+          }
+        }
+        
+        // Restore all keys to localStorage and upload to Supabase
+        for (const [key, val] of Object.entries(parsedData)) {
           if (typeof val === "string") {
             localStorage.setItem(key, val);
           } else {
             localStorage.setItem(key, JSON.stringify(val));
           }
-        });
+
+          if (key.startsWith('employees_') && Array.isArray(val) && val.length > 0) {
+            const compId = key.replace('employees_', '');
+            await supabase.from('employees').upsert(val.map((e: any) => ({
+              id: e.id,
+              company_id: compId,
+              name: e.name,
+              role: e.role,
+              shift: e.shift,
+              rate: e.rate,
+              status: e.status
+            })));
+          }
+
+          if (key.startsWith('attendance_') && Array.isArray(val) && val.length > 0) {
+            const compId = key.replace('attendance_', '');
+            await supabase.from('attendance').upsert(val.map((a: any) => ({
+              id: a.id,
+              company_id: compId,
+              employee_id: a.employeeRefId,
+              date: a.date,
+              shift: a.shift,
+              hours: a.hours,
+              rate: a.rate,
+              incentive: a.incentive || 0,
+              weekly_advance: a.weeklyAdvance || 0,
+              loan: a.loan || 0,
+              is_modified: a.isModified
+            })));
+          }
+        }
 
         toast({
-          title: "Backup Restored",
-          description: "All records and configurations have been successfully restored.",
+          title: "Backup Restored Successfully",
+          description: "All records have been restored and synced to the cloud.",
         });
 
         setTimeout(() => {
@@ -125,7 +179,7 @@ export function FactorySettings({ config: propConfig, onSave }: FactorySettingsP
         toast({
           variant: "destructive",
           title: "Restore Failed",
-          description: "Invalid backup file format. Please check the file and try again.",
+          description: "An error occurred during restoration.",
         });
       }
     };
