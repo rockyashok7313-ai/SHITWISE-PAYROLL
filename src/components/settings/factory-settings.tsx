@@ -110,60 +110,71 @@ export function FactorySettings({ config: propConfig, onSave }: FactorySettingsP
           description: "Uploading data to cloud database. Please do not close this window.",
         });
 
-        // If they have companies_cache, try to upload to Supabase
-        if (parsedData.companies_cache || parsedData.companies) {
-          const comps = parsedData.companies_cache || parsedData.companies;
-          if (Array.isArray(comps) && comps.length > 0) {
-            await supabase.from('companies').upsert(comps.map((c: any) => ({
-              id: c.id,
-              name: c.name,
-              unit: c.unit,
-              standard_shift_hours: c.standardShiftHours || 9,
-              factory_shift_hours: c.factoryShiftHours || 12,
-              default_incentive: c.defaultIncentive || 100,
-              currency: c.currency || "INR",
-              financial_year: c.financialYear || "2026-27"
-            })));
-          }
-        }
-        
-        // Restore all keys to localStorage and upload to Supabase
+        // 1. Restore all keys to localStorage FIRST so data is never lost
         for (const [key, val] of Object.entries(parsedData)) {
           if (typeof val === "string") {
             localStorage.setItem(key, val);
           } else {
             localStorage.setItem(key, JSON.stringify(val));
           }
+        }
 
-          if (key.startsWith('employees_') && Array.isArray(val) && val.length > 0) {
-            const compId = key.replace('employees_', '');
-            await supabase.from('employees').upsert(val.map((e: any) => ({
-              id: e.id,
-              company_id: compId,
-              name: e.name,
-              role: e.role,
-              shift: e.shift,
-              rate: e.rate,
-              status: e.status
-            })));
+        // 2. Try to sync to Supabase, but don't fail the local restore if it errors
+        try {
+          if (parsedData.companies_cache || parsedData.companies) {
+            const comps = parsedData.companies_cache || parsedData.companies;
+            if (Array.isArray(comps) && comps.length > 0) {
+              await supabase.from('companies').upsert(comps.map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                unit: c.unit,
+                standard_shift_hours: c.standardShiftHours || 9,
+                factory_shift_hours: c.factoryShiftHours || 12,
+                default_incentive: c.defaultIncentive || 100,
+                currency: c.currency || "INR",
+                financial_year: c.financialYear || "2026-27"
+              })));
+            }
           }
 
-          if (key.startsWith('attendance_') && Array.isArray(val) && val.length > 0) {
-            const compId = key.replace('attendance_', '');
-            await supabase.from('attendance').upsert(val.map((a: any) => ({
-              id: a.id,
-              company_id: compId,
-              employee_id: a.employeeRefId,
-              date: a.date,
-              shift: a.shift,
-              hours: a.hours,
-              rate: a.rate,
-              incentive: a.incentive || 0,
-              weekly_advance: a.weeklyAdvance || 0,
-              loan: a.loan || 0,
-              is_modified: a.isModified
-            })));
+          for (const [key, val] of Object.entries(parsedData)) {
+            if (key.startsWith('employees_') && Array.isArray(val) && val.length > 0) {
+              const compId = key.replace('employees_', '');
+              await supabase.from('employees').upsert(val.map((e: any) => ({
+                id: e.id,
+                company_id: compId,
+                name: e.name,
+                role: e.role,
+                shift: e.shift,
+                rate: e.rate,
+                status: e.status
+              })));
+            }
+
+            if (key.startsWith('attendance_') && Array.isArray(val) && val.length > 0) {
+              const compId = key.replace('attendance_', '');
+              await supabase.from('attendance').upsert(val.map((a: any) => ({
+                id: a.id,
+                company_id: compId,
+                employee_id: a.employeeRefId,
+                date: a.date,
+                shift: a.shift,
+                hours: a.hours,
+                rate: a.rate,
+                incentive: a.incentive || 0,
+                weekly_advance: a.weeklyAdvance || 0,
+                loan: a.loan || 0,
+                is_modified: a.isModified
+              })));
+            }
           }
+        } catch (supabaseError) {
+          console.error("Cloud sync failed, but local restore succeeded:", supabaseError);
+          toast({
+            variant: "destructive",
+            title: "Cloud Sync Failed",
+            description: "Your data was restored locally, but failed to sync to the cloud database. Please verify your internet connection and database permissions.",
+          });
         }
 
         toast({
