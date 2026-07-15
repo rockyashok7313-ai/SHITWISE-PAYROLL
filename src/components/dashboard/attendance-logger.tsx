@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EMPLOYEES } from "@/lib/mock-data";
 import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, CalendarDays, Trash2, Clock, Calendar, FileDown, Plus, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
@@ -157,10 +158,10 @@ export function AttendanceLogger({
   }, [activeFinancialYear, selectedMonth, selectedYear]);
 
   const togglePaymentStatus = (empId: string) => {
-    setPaymentStatuses(prev => {
+    setPaymentStatuses((prev: Record<string, 'Paid' | 'Unpaid'>) => {
       const current = prev[empId] || 'Unpaid';
-      const next = current === 'Paid' ? 'Unpaid' : 'Paid';
-      const updated = { ...prev, [empId]: next };
+      const next: 'Paid' | 'Unpaid' = current === 'Paid' ? 'Unpaid' : 'Paid';
+      const updated: Record<string, 'Paid' | 'Unpaid'> = { ...prev, [empId]: next };
       localStorage.setItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`, JSON.stringify(updated));
       return updated;
     });
@@ -238,13 +239,32 @@ export function AttendanceLogger({
     }
   };
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = async (statusFilter?: 'Paid' | 'Unpaid') => {
     setIsExportingPDF(true);
     try {
       const { jsPDF } = await import("jspdf");
+      
+      let exportEntries = entries;
+      if (statusFilter) {
+         exportEntries = entries.filter(e => {
+            const empId = e.employeeRefId || e.id.split('-')[0];
+            const status = paymentStatuses[empId] || 'Unpaid';
+            return status === statusFilter;
+         });
+      }
+      
+      if (exportEntries.length === 0) {
+         toast({
+            title: "No Data",
+            description: `There are no ${statusFilter ? statusFilter.toLowerCase() : ''} entries to export.`,
+         });
+         setIsExportingPDF(false);
+         return;
+      }
+      
       const pdf = new jsPDF("l", "mm", "a4");
       
-      const logDate = entries[0]?.date || new Date().toISOString().split('T')[0];
+      const logDate = exportEntries[0]?.date || new Date().toISOString().split('T')[0];
       
       pdf.setFont("helvetica", "normal");
       
@@ -256,7 +276,10 @@ export function AttendanceLogger({
       pdf.setFontSize(18);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(31, 41, 55);
-      pdf.text("DAILY ATTENDANCE & PAYROLL REPORT", 15, 32);
+      const title = statusFilter 
+        ? `${statusFilter.toUpperCase()} SALARY REPORT` 
+        : "DAILY ATTENDANCE & PAYROLL REPORT";
+      pdf.text(title, 15, 32);
       
       // Metadata
       pdf.setFontSize(9);
@@ -273,7 +296,7 @@ export function AttendanceLogger({
       pdf.setFont("helvetica", "bold");
       pdf.text("TOTAL STAFF:", 180, 42);
       pdf.setFont("helvetica", "normal");
-      pdf.text(String(entries.length), 220, 42);
+      pdf.text(String(exportEntries.length), 220, 42);
       
       pdf.setFont("helvetica", "bold");
       pdf.text("STATUS:", 180, 47);
@@ -354,7 +377,7 @@ export function AttendanceLogger({
       let totalNet = 0;
       let totalRoundoff = 0;
       
-      entries.forEach((entry, idx) => {
+      exportEntries.forEach((entry, idx) => {
         const shiftHrs = entry.shift === '12-hour' ? 12 : 9;
         const perDaySalary = entry.rate * shiftHrs;
         const gross = entry.hours * perDaySalary;
@@ -642,16 +665,33 @@ export function AttendanceLogger({
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleExportPDF}
-            disabled={isExportingPDF}
-            className="border-primary/30 hover:bg-primary/10"
-          >
-            <FileDown className="w-4 h-4 mr-2 text-primary" />
-            Download PDF (Landscape)
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                disabled={isExportingPDF}
+                className="border-primary/30 hover:bg-primary/10"
+              >
+                <FileDown className="w-4 h-4 mr-2 text-primary" />
+                Download PDF (Landscape)
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 font-bold">
+              <DropdownMenuItem onClick={() => handleExportPDF()} className="cursor-pointer">
+                <FileDown className="w-4 h-4 mr-2" />
+                All Salaries
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportPDF('Paid')} className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-500/10">
+                <Coins className="w-4 h-4 mr-2" />
+                Paid Salaries Only
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExportPDF('Unpaid')} className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10">
+                <Calculator className="w-4 h-4 mr-2" />
+                Unpaid Salaries Only
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button 
             variant="outline" 
             size="sm"

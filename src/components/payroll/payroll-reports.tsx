@@ -519,15 +519,16 @@ Please contact HR if you have any questions.`;
             return false;
           });
 
-          daysWorked = empLogs.length;
+          daysWorked = 0;
           empLogs.forEach(log => {
-             // For hourly rate based calculations, use log.hours * rate.
-             // If we just want daily shifts, it's (log.hours || shiftHours) * (log.rate || emp.rate)
-             // Default to full shift hours if not specified
-             const shiftHours = emp.shift === '12-hour' ? 12 : 9;
-             const hrs = log.hours || shiftHours;
-             const r = log.rate || emp.rate;
-             gross += (hrs * r);
+             // log.hours contains the Total Days for the month (as logged by Attendance Logger)
+             const days = log.hours || 0;
+             const shiftHours = (log.shift || emp.shift) === '12-hour' ? 12 : 9;
+             const hourlyRate = log.rate || emp.rate || 0;
+             const dailyRate = hourlyRate * shiftHours;
+             
+             daysWorked += days;
+             gross += (days * dailyRate);
              incentive += (log.incentive || 0);
              deductions += (log.weeklyAdvance || 0) + (log.loan || 0);
           });
