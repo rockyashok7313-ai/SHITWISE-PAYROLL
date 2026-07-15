@@ -498,11 +498,41 @@ Please contact HR if you have any questions.`;
     setTimeout(() => {
       const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
       const data = roster.map(emp => {
-        const daysWorked = Math.floor(Math.random() * 5) + 21; // 21-26 days
-        const dailyRate = emp.rate * (emp.shift === '12-hour' ? 12 : 9);
-        const gross = dailyRate * daysWorked;
-        const incentive = Math.floor(Math.random() * 2000);
-        const deductions = Math.floor(Math.random() * 1500);
+        let daysWorked = 0;
+        let gross = 0;
+        let incentive = 0;
+        let deductions = 0;
+
+        if (attendance && attendance.length > 0) {
+          const empLogs = attendance.filter(entry => {
+            const isEmpMatch = (entry.employeeRefId || entry.id?.split('-')[0]) === emp.id || entry.id === emp.id;
+            if (!isEmpMatch) return false;
+            
+            if (entry.date) {
+               const parts = entry.date.split('-');
+               if (parts.length >= 3) {
+                 const logYear = parts[0];
+                 const logMonth = MONTHS[parseInt(parts[1]) - 1];
+                 return logYear === selectedYear && logMonth === selectedMonth;
+               }
+            }
+            return false;
+          });
+
+          daysWorked = empLogs.length;
+          empLogs.forEach(log => {
+             // For hourly rate based calculations, use log.hours * rate.
+             // If we just want daily shifts, it's (log.hours || shiftHours) * (log.rate || emp.rate)
+             // Default to full shift hours if not specified
+             const shiftHours = emp.shift === '12-hour' ? 12 : 9;
+             const hrs = log.hours || shiftHours;
+             const r = log.rate || emp.rate;
+             gross += (hrs * r);
+             incentive += (log.incentive || 0);
+             deductions += (log.weeklyAdvance || 0) + (log.loan || 0);
+          });
+        }
+
         return {
           ...emp,
           daysWorked,
