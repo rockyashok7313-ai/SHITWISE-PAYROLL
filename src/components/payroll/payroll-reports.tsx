@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle, Search } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle, Search, Coins, Calculator } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -415,46 +416,238 @@ export function PayrollReports({ activeFinancialYear, employees, attendance }: P
     }
   };
 
-  const handleDownloadPDF = async () => {
-    if (!reportRef.current) return;
+  const handleDownloadPDF = async (statusFilter?: 'Paid' | 'Unpaid') => {
+    if (!reportData) return;
     
     setIsDownloading(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
       const { jsPDF } = await import("jspdf");
+      
+      let exportEntries = reportData;
+      if (statusFilter) {
+         exportEntries = reportData.filter(row => {
+            const status = paymentStatuses[row.id] || 'Unpaid';
+            return status === statusFilter;
+         });
+      }
+      
+      if (exportEntries.length === 0) {
+         toast({
+            title: "No Data",
+            description: `There are no ${statusFilter ? statusFilter.toLowerCase() : ''} entries to export.`,
+         });
+         setIsDownloading(false);
+         return;
+      }
+      
+      const pdf = new jsPDF("l", "mm", "a4");
+      
+      pdf.setFont("helvetica", "normal");
+      
+      // Header Accent Band
+      pdf.setFillColor(31, 41, 55); 
+      pdf.rect(15, 15, 267, 8, "F");
+      
+      // Title
+      pdf.setFontSize(18);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(31, 41, 55);
+      const title = statusFilter 
+        ? `${statusFilter.toUpperCase()} SALARY REPORT` 
+        : "MONTHLY PAYROLL SUMMARY";
+      pdf.text(title, 15, 32);
+      
+      // Metadata
+      pdf.setFontSize(9);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("REPORT MONTH:", 15, 42);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`${selectedMonth} ${selectedYear}`, 48, 42);
+      
+      pdf.setFont("helvetica", "bold");
+      pdf.text("FINANCIAL YEAR:", 15, 47);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(activeFinancialYear, 48, 47);
 
-      const element = reportRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff"
+      pdf.setFont("helvetica", "bold");
+      pdf.text("TOTAL STAFF:", 180, 42);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(String(exportEntries.length), 220, 42);
+      
+      pdf.setFont("helvetica", "bold");
+      pdf.text("STATUS:", 180, 47);
+      pdf.setFont("helvetica", "bold");
+      pdf.setTextColor(16, 185, 129); 
+      pdf.text("FINALIZED", 200, 47);
+      
+      // Divider
+      pdf.setDrawColor(229, 231, 235);
+      pdf.setLineWidth(0.5);
+      pdf.line(15, 52, 282, 52);
+      
+      // Table Header Setup
+      const headers = [
+        { label: "ID", x: 17, align: "left" },
+        { label: "Name", x: 34, align: "left" },
+        { label: "Role", x: 74, align: "left" },
+        { label: "Days", x: 115, align: "right" },
+        { label: "Gross", x: 150, align: "right" },
+        { label: "Incent.", x: 185, align: "right" },
+        { label: "Deductions", x: 220, align: "right" },
+        { label: "Net Payout", x: 265, align: "right" }
+      ];
+      
+      let pageNumber = 1;
+      const colBounds = [15, 32, 72, 120, 155, 190, 225, 270, 282];
+      
+      const drawTableHeaders = (startY: number) => {
+        pdf.setFillColor(243, 244, 246); 
+        pdf.rect(15, startY - 5, 267, 7, "F");
+        
+        pdf.setFontSize(8.5);
+        pdf.setFont("helvetica", "bold");
+        pdf.setTextColor(55, 65, 81);
+        
+        headers.forEach(h => {
+          pdf.text(h.label, h.x, startY, { align: h.align as any });
+        });
+        
+        pdf.setDrawColor(156, 163, 175);
+        pdf.rect(15, startY - 5, 267, 7, "S");
+        colBounds.forEach(bx => {
+          pdf.line(bx, startY - 5, bx, startY + 2);
+        });
+      };
+      
+      drawTableHeaders(61);
+      
+      let y = 68;
+      let rowHeight = 7.5;
+      let fontSize = 8.5;
+      
+      const checkPageBreak = (requiredSpace = 10) => {
+        if (y + requiredSpace > 190) { // A4 Landscape height is 210mm
+          pdf.setFontSize(8);
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(107, 114, 128);
+          pdf.text(`Page ${pageNumber}`, 282, 200, { align: "right" });
+          
+          pdf.addPage();
+          pageNumber++;
+          y = 20;
+          drawTableHeaders(y);
+          y += 7;
+          pdf.setFont("helvetica", "normal");
+          pdf.setTextColor(0, 0, 0);
+        }
+      };
+      
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(0, 0, 0);
+      
+      let totalGross = 0;
+      let totalIncentive = 0;
+      let totalDeductions = 0;
+      let totalNet = 0;
+      
+      exportEntries.forEach((entry, idx) => {
+        totalGross += entry.gross;
+        totalIncentive += entry.incentive;
+        totalDeductions += entry.deductions;
+        totalNet += entry.net;
+        
+        checkPageBreak(rowHeight);
+
+        const rowTop = y - rowHeight + 2.5;
+        const rowBottom = y + 2.5;
+
+        if (idx % 2 === 1) {
+          pdf.setFillColor(249, 250, 251); 
+          pdf.rect(15, rowTop, 267, rowHeight, "F");
+        }
+        
+        pdf.setFont("courier", "normal");
+        pdf.setFontSize(fontSize);
+        const shortId = `LBR${entry.id.substring(entry.id.length - 4).toUpperCase()}`;
+        pdf.text(shortId, 17, y);
+        
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(fontSize);
+        pdf.text(entry.name.substring(0, 16), 34, y);
+        
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(fontSize - 1);
+        pdf.text((entry.role || "Staff").substring(0, 15), 74, y);
+        
+        pdf.setFont("courier", "normal");
+        pdf.setFontSize(fontSize);
+        pdf.text(String(entry.daysWorked), 115, y, { align: "right" });
+        pdf.text(entry.gross.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 150, y, { align: "right" });
+        pdf.text(entry.incentive.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 185, y, { align: "right" });
+        pdf.text(entry.deductions.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 220, y, { align: "right" });
+        
+        pdf.setFont("courier", "bold");
+        pdf.text(`${entry.net.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 265, y, { align: "right" });
+        
+        pdf.setDrawColor(209, 213, 219);
+        pdf.line(15, rowBottom, 282, rowBottom);
+        colBounds.forEach(bx => {
+          pdf.line(bx, rowTop, bx, rowBottom);
+        });
+        
+        y += rowHeight;
       });
       
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF("p", "mm", "a4");
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      checkPageBreak(30);
+
+      // Totals Footer Row
+      const footerTop = y - rowHeight + 2.5;
+      const footerBottom = footerTop + 8;
+
+      pdf.setDrawColor(31, 41, 55);
+      pdf.setFillColor(243, 244, 246);
+      pdf.rect(15, footerTop, 267, 8, "FD");
       
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      colBounds.forEach(bx => {
+        pdf.line(bx, footerTop, bx, footerBottom);
+      });
+
+      const footerY = footerTop + 5.5;
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(31, 41, 55);
+      pdf.text("TOTALS", 34, footerY);
       
-      const fileName = selectedEmployeeForSlip 
-        ? `Payslip_${selectedEmployeeForSlip.id}_${selectedMonth}_${selectedYear}.pdf`
-        : `Payroll_Report_${selectedMonth}_${selectedYear}.pdf`;
-        
+      pdf.setFont("courier", "bold");
+      pdf.text("-", 115, footerY, { align: "right" });
+      pdf.text(totalGross.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 150, footerY, { align: "right" });
+      pdf.text(totalIncentive.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 185, footerY, { align: "right" });
+      pdf.text(totalDeductions.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 220, footerY, { align: "right" });
+      pdf.text(`${totalNet.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 265, footerY, { align: "right" });
+      
+      // Signature lines
+      const sigY = y + 15;
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(9);
+      pdf.setTextColor(0, 0, 0);
+      pdf.text("Prepared By: ____________________", 15, sigY);
+      pdf.text("Checked By: ____________________", 115, sigY);
+      pdf.text("Authorized Signatory: ____________________", 200, sigY);
+      
+      const fileName = `Payroll_Report_${statusFilter ? statusFilter + '_' : ''}${selectedMonth}_${selectedYear}.pdf`;
       pdf.save(fileName);
       
       toast({
         title: "PDF Downloaded",
-        description: `${fileName} has been saved to your device.`,
+        description: `${statusFilter || 'All'} payroll report has been saved to your device.`,
       });
     } catch (error) {
-      console.error("PDF generation failed:", error);
+      console.error(error);
       toast({
         variant: "destructive",
-        title: "Download Failed",
-        description: "Could not generate PDF. Please try the Print option.",
+        title: "PDF Export Failed",
+        description: "Could not export PDF file.",
       });
     } finally {
       setIsDownloading(false);
@@ -925,20 +1118,37 @@ Please contact HR if you have any questions.`;
             )}
             Download Excel
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="border-border hover:bg-accent/5"
-            onClick={handleDownloadPDF}
-            disabled={!reportData || isDownloading}
-          >
-            {isDownloading ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <FileDown className="w-4 h-4 mr-2" />
-            )}
-            Download PDF
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="border-border hover:bg-accent/5"
+                disabled={!reportData || isDownloading}
+              >
+                {isDownloading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4 mr-2" />
+                )}
+                PDF Reports
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 font-bold z-50">
+              <DropdownMenuItem onClick={() => handleDownloadPDF()} className="cursor-pointer">
+                <FileDown className="w-4 h-4 mr-2" />
+                All Salaries (Landscape)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadPDF('Paid')} className="cursor-pointer text-green-600 focus:text-green-600 focus:bg-green-500/10">
+                <Coins className="w-4 h-4 mr-2" />
+                Paid Salaries Only
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadPDF('Unpaid')} className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10">
+                <Calculator className="w-4 h-4 mr-2" />
+                Unpaid Salaries Only
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button 
             variant="default" 
             size="sm" 
