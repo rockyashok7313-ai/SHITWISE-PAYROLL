@@ -65,6 +65,7 @@ export function AttendanceLogger({
   const [selectedYear, setSelectedYear] = useState<string>(() => getDefaultPayrollPeriod().year);
   const [draftMonth, setDraftMonth] = useState<string>(() => getDefaultPayrollPeriod().month);
   const [draftYear, setDraftYear] = useState<string>(() => getDefaultPayrollPeriod().year);
+  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, 'Paid' | 'Unpaid'>>({});
   const [newEntryDetails, setNewEntryDetails] = useState({
     fromDate: "",
     toDate: "",
@@ -145,6 +146,25 @@ export function AttendanceLogger({
     
     setEntries(loadedEntries);
   }, [attendance, employees, selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    const savedStatuses = localStorage.getItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`);
+    if (savedStatuses) {
+      setPaymentStatuses(JSON.parse(savedStatuses));
+    } else {
+      setPaymentStatuses({});
+    }
+  }, [activeFinancialYear, selectedMonth, selectedYear]);
+
+  const togglePaymentStatus = (empId: string) => {
+    setPaymentStatuses(prev => {
+      const current = prev[empId] || 'Unpaid';
+      const next = current === 'Paid' ? 'Unpaid' : 'Paid';
+      const updated = { ...prev, [empId]: next };
+      localStorage.setItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Save entries to parent state on change
   useEffect(() => {
@@ -732,6 +752,7 @@ export function AttendanceLogger({
               <th className="p-4 min-w-[140px] text-destructive text-left">Loan (-)</th>
               <th className="p-4 min-w-[100px] text-muted-foreground text-left">Roundoff</th>
               <th className="p-4 min-w-[120px] text-accent text-left">Net Payout</th>
+              <th className="p-4 min-w-[100px] text-center text-foreground">Status</th>
               <th className="p-4 text-right text-foreground">Action</th>
             </TableRow>
           </TableHeader>
@@ -866,6 +887,21 @@ export function AttendanceLogger({
                   </TableCell>
                   <TableCell className="font-headline font-black text-lg text-accent">
                     ₹{netPayout.toLocaleString('en-IN')}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className={cn(
+                        "h-8 text-[10px] uppercase tracking-wider font-bold min-w-[70px]",
+                        paymentStatuses[entry.employeeRefId || entry.id.split('-')[0]] === 'Paid' 
+                          ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20" 
+                          : "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20"
+                      )}
+                      onClick={() => togglePaymentStatus(entry.employeeRefId || entry.id.split('-')[0])}
+                    >
+                      {paymentStatuses[entry.employeeRefId || entry.id.split('-')[0]] === 'Paid' ? 'Paid' : 'Unpaid'}
+                    </Button>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
