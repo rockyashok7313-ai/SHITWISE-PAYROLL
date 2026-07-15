@@ -26,7 +26,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-const monthlyTrendData = [
+const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
   { month: "Feb", cost: 138000 },
   { month: "Mar", cost: 132000 },
@@ -102,6 +102,16 @@ export function PayrollReports({ activeFinancialYear, employees, attendance }: P
   const reportRef = useRef<HTMLDivElement>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("May");
   const [selectedYear, setSelectedYear] = useState<string>(activeFinancialYear.split('-')[0]);
+  const [trendData, setTrendData] = useState(DEFAULT_TREND_DATA);
+  
+  useEffect(() => {
+    const saved = localStorage.getItem(`monthly_expenditure_${activeFinancialYear}`);
+    if (saved) {
+      setTrendData(JSON.parse(saved));
+    } else {
+      setTrendData(DEFAULT_TREND_DATA);
+    }
+  }, [activeFinancialYear]);
 
   // Bonus Calculator States
   const [isBonusViewActive, setIsBonusViewActive] = useState(false);
@@ -540,8 +550,21 @@ Please contact HR if you have any questions.`;
           gross,
           incentive,
           deductions,
-          net: gross + incentive - deductions
+          net: Math.round(gross + incentive - deductions)
         };
+      });
+
+      const totalCost = data.reduce((sum, emp) => sum + emp.net, 0);
+      
+      setTrendData(prev => {
+        const newData = [...prev];
+        const monthPrefix = selectedMonth.substring(0, 3);
+        const monthIndex = newData.findIndex(d => d.month === monthPrefix);
+        if (monthIndex !== -1) {
+          newData[monthIndex] = { ...newData[monthIndex], cost: totalCost };
+        }
+        localStorage.setItem(`monthly_expenditure_${activeFinancialYear}`, JSON.stringify(newData));
+        return newData;
       });
 
       const savedStatuses = localStorage.getItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`);
@@ -1120,7 +1143,7 @@ Please contact HR if you have any questions.`;
             <CardContent>
               <div className="h-[350px] w-full mt-4">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyTrendData}>
+                  <BarChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
                     <XAxis 
                       dataKey="month" 
