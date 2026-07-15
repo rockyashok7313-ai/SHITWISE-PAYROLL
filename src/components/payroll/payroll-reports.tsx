@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle, Search } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -348,6 +348,7 @@ export function PayrollReports({ activeFinancialYear, employees, attendance }: P
   const [reportData, setReportData] = useState<any[] | null>(null);
   const [selectedEmployeeForSlip, setSelectedEmployeeForSlip] = useState<any>(null);
   const [paymentStatuses, setPaymentStatuses] = useState<Record<string, 'Paid' | 'Unpaid'>>({});
+  const [searchQuery, setSearchQuery] = useState("");
 
   const handlePrint = () => {
     window.print();
@@ -846,7 +847,16 @@ Please contact HR if you have any questions.`;
           </Button>
         </div>
         
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3 items-center w-full md:w-auto">
+          <div className="relative no-print mr-auto md:mr-2 flex-grow md:flex-grow-0">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search labourer name or ID..."
+              className="pl-8 h-9 w-full md:w-[250px] bg-background border-border focus-visible:ring-primary"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
           <Button 
             variant="outline" 
             size="sm" 
@@ -932,7 +942,12 @@ Please contact HR if you have any questions.`;
                     </tr>
                   </thead>
                   <tbody>
-                    {reportData.map((row) => (
+                    {reportData
+                      .filter(row => 
+                        row.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        row.id.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((row) => (
                       <tr key={row.id} className="border-b border-border/30 hover:bg-accent/5">
                         <td className="p-4 font-mono text-muted-foreground">{row.id}</td>
                         <td className="p-4 font-bold">{row.name}</td>
