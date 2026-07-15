@@ -437,7 +437,7 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                               <AvatarImage src={emp.photoUrl} alt={emp.name} />
                             ) : (
                               <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                {emp.name.split(' ').map((n: string) => n[0]).join('')}
+                                {(emp.name || 'U').split(' ').map((n: string) => n[0]).join('')}
                               </AvatarFallback>
                             )}
                           </Avatar>
@@ -483,13 +483,13 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                                     <AvatarImage src={emp.photoUrl} />
                                   ) : (
                                     <AvatarFallback className="bg-primary/10 text-primary text-4xl">
-                                      {emp.name.split(' ').map((n: string) => n[0]).join('')}
+                                      {(emp.name || 'U').split(' ').map((n: string) => n[0]).join('')}
                                     </AvatarFallback>
                                   )}
                                 </Avatar>
                                 <div className="text-center space-y-1">
                                   <h3 className="text-2xl font-bold font-headline text-foreground">{emp.name}</h3>
-                                  <p className="text-sm text-muted-foreground font-mono">{emp.id} • {emp.gender.toUpperCase()}</p>
+                                  <p className="text-sm text-muted-foreground font-mono">{emp.id} • {(emp.gender || '').toUpperCase()}</p>
                                   <Badge variant="outline" className="mt-2 bg-primary/10 text-primary border-primary/20 uppercase">{emp.role}</Badge>
                                 </div>
                               </div>
@@ -554,7 +554,7 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                                       <AvatarImage src={editingEmployee.photoUrl} />
                                     ) : (
                                       <AvatarFallback className="bg-muted text-2xl font-bold">
-                                        {editingEmployee?.name?.split(' ').map((n: string) => n[0]).join('')}
+                                        {(editingEmployee?.name || 'U').split(' ').map((n: string) => n[0]).join('')}
                                       </AvatarFallback>
                                     )}
                                   </Avatar>

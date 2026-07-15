@@ -347,9 +347,20 @@ export function PayrollReports({ activeFinancialYear, employees, attendance }: P
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [reportData, setReportData] = useState<any[] | null>(null);
   const [selectedEmployeeForSlip, setSelectedEmployeeForSlip] = useState<any>(null);
+  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, 'Paid' | 'Unpaid'>>({});
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const togglePaymentStatus = (empId: string) => {
+    setPaymentStatuses(prev => {
+      const current = prev[empId] || 'Unpaid';
+      const next = current === 'Paid' ? 'Unpaid' : 'Paid';
+      const updated = { ...prev, [empId]: next };
+      localStorage.setItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`, JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const handleDownloadExcel = async () => {
@@ -500,6 +511,14 @@ Please contact HR if you have any questions.`;
           net: gross + incentive - deductions
         };
       });
+
+      const savedStatuses = localStorage.getItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`);
+      if (savedStatuses) {
+        setPaymentStatuses(JSON.parse(savedStatuses));
+      } else {
+        setPaymentStatuses({});
+      }
+
       setReportData(data);
       setIsGenerating(false);
       toast({
@@ -909,6 +928,7 @@ Please contact HR if you have any questions.`;
                       <th className="p-4 text-[10px] uppercase font-bold text-right">Inc. (+)</th>
                       <th className="p-4 text-[10px] uppercase font-bold text-right">Ded. (-)</th>
                       <th className="p-4 text-[10px] uppercase font-bold text-right">Net Payout</th>
+                      <th className="p-4 text-[10px] uppercase font-bold text-center no-print">Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -921,6 +941,21 @@ Please contact HR if you have any questions.`;
                         <td className="p-4 text-right font-mono text-green-500">₹{row.incentive.toLocaleString('en-IN')}</td>
                         <td className="p-4 text-right font-mono text-destructive">₹{row.deductions.toLocaleString('en-IN')}</td>
                         <td className="p-4 text-right font-headline font-black text-accent">₹{row.net.toLocaleString('en-IN')}</td>
+                        <td className="p-4 text-center no-print">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className={cn(
+                              "h-7 text-[10px] uppercase tracking-wider font-bold min-w-[80px]",
+                              paymentStatuses[row.id] === 'Paid' 
+                                ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20" 
+                                : "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20"
+                            )}
+                            onClick={() => togglePaymentStatus(row.id)}
+                          >
+                            {paymentStatuses[row.id] === 'Paid' ? 'Paid' : 'Unpaid'}
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -932,6 +967,21 @@ Please contact HR if you have any questions.`;
                       <td className="p-4 text-right text-green-500">₹{reportData.reduce((a, b) => a + b.incentive, 0).toLocaleString('en-IN')}</td>
                       <td className="p-4 text-right text-destructive">₹{reportData.reduce((a, b) => a + b.deductions, 0).toLocaleString('en-IN')}</td>
                       <td className="p-4 text-right text-accent text-lg">₹{reportData.reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}</td>
+                      <td className="p-4 no-print"></td>
+                    </tr>
+                    <tr className="bg-green-500/10 border-t border-green-500/20">
+                      <td colSpan={6} className="p-3 text-right text-green-700 uppercase text-xs font-bold tracking-wider">Total Paid Salary</td>
+                      <td className="p-3 text-right text-green-700 font-headline font-black text-lg">
+                        ₹{reportData.filter(r => paymentStatuses[r.id] === 'Paid').reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="no-print"></td>
+                    </tr>
+                    <tr className="bg-destructive/10 border-t border-destructive/20">
+                      <td colSpan={6} className="p-3 text-right text-destructive uppercase text-xs font-bold tracking-wider">Total Unpaid Salary</td>
+                      <td className="p-3 text-right text-destructive font-headline font-black text-lg">
+                        ₹{reportData.filter(r => paymentStatuses[r.id] !== 'Paid').reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="no-print"></td>
                     </tr>
                   </tfoot>
                 </table>
