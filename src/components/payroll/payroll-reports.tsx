@@ -1077,34 +1077,6 @@ Please contact HR if you have any questions.`;
       </div>
 
       <div className="no-print space-y-8">
-        {reportData && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-accent" />
-              <h4 className="font-headline font-bold text-lg">Generate Individual Payslips</h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {reportData.map((emp) => (
-                <Button 
-                  key={emp.id} 
-                  variant="outline" 
-                  className={cn(
-                    "justify-between h-14 border-border hover:border-accent group",
-                    selectedEmployeeForSlip?.id === emp.id && "bg-accent/10 border-accent"
-                  )}
-                  onClick={() => setSelectedEmployeeForSlip(emp)}
-                >
-                  <div className="flex flex-col items-start overflow-hidden text-left">
-                    <span className="font-bold text-sm truncate w-full">{emp.name}</span>
-                    <span className="text-[10px] text-muted-foreground uppercase">{emp.id}</span>
-                  </div>
-                  <FileText className="w-4 h-4 text-muted-foreground group-hover:text-accent" />
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {!selectedEmployeeForSlip && (
           <Card className="bg-card/30 border-border">
             <CardHeader>
