@@ -821,8 +821,8 @@ Please contact HR if you have any questions.`;
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="col-span-1 md:col-span-1">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <Card className="col-span-1 lg:col-span-1 h-full flex flex-col">
             <CardHeader>
               <CardTitle className="text-sm">Generate Voucher</CardTitle>
             </CardHeader>
@@ -914,27 +914,27 @@ Please contact HR if you have any questions.`;
             </CardContent>
           </Card>
 
-          <div className="col-span-1 md:col-span-2 space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <Card className="bg-emerald-950/20 border-emerald-900/30">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-emerald-500">Bank Paid ({voucherMonth} {voucherYear})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold font-mono">₹{bankTotal.toLocaleString('en-IN')}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-amber-950/20 border-amber-900/30">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-amber-500">Cash Paid ({voucherMonth} {voucherYear})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold font-mono">₹{cashTotal.toLocaleString('en-IN')}</div>
-                </CardContent>
-              </Card>
-            </div>
+          <div className="col-span-1 lg:col-span-1 flex flex-col gap-6">
+            <Card className="bg-emerald-950/20 border-emerald-900/30 flex-1 flex flex-col justify-center min-h-[140px]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-emerald-500">Bank Paid ({voucherMonth} {voucherYear})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold font-mono">₹{bankTotal.toLocaleString('en-IN')}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-amber-950/20 border-amber-900/30 flex-1 flex flex-col justify-center min-h-[140px]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-amber-500">Cash Paid ({voucherMonth} {voucherYear})</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold font-mono">₹{cashTotal.toLocaleString('en-IN')}</div>
+              </CardContent>
+            </Card>
+          </div>
 
-            <Card>
+          <div className="col-span-1 lg:col-span-2">
+            <Card className="h-full">
               <CardHeader>
                 <CardTitle className="text-sm">Voucher History ({voucherMonth} {voucherYear})</CardTitle>
               </CardHeader>
