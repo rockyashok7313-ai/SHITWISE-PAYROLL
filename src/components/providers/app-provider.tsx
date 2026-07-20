@@ -380,6 +380,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           employee_id: a.employeeRefId,
           date: a.date,
           shift: a.shift,
+          clock_in: a.clockIn,
+          clock_out: a.clockOut,
           hours: a.hours,
           rate: a.rate,
           incentive: a.incentive || 0,
