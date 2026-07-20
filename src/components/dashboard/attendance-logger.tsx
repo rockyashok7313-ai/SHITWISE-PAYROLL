@@ -12,6 +12,7 @@ import { Save, Download, Edit2, Zap, Calculator, Coins, TrendingUp, Wallet, Cale
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useRole } from "@/hooks/use-role";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -33,11 +34,34 @@ const MONTHS = [
 
 const YEARS = ["2023", "2024", "2025", "2026", "2027"];
 
+export interface Employee {
+  id: string;
+  name: string;
+  role: string;
+  rate: number;
+  shift: '9-hour' | '12-hour';
+  mobile?: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  employeeRefId?: string;
+  date: string;
+  shift: '9-hour' | '12-hour';
+  clockIn?: string;
+  clockOut?: string;
+  hours: number;
+  incentive: number;
+  weeklyAdvance: number;
+  loan: number;
+  isModified?: boolean;
+  name: string;
+  role: string;
+  rate: number;
+}
+
 interface AttendanceLoggerProps {
-  activeFinancialYear: string;
-  employees: any[];
-  attendance: any[];
-  onAttendanceChange: (entries: any[]) => void;
+  // Now using AppContext
 }
 
 const getDefaultPayrollPeriod = () => {
@@ -49,13 +73,13 @@ const getDefaultPayrollPeriod = () => {
   };
 };
 
-export function AttendanceLogger({ 
-  activeFinancialYear, 
-  employees, 
-  attendance, 
-  onAttendanceChange 
-}: AttendanceLoggerProps) {
+import { useAppContext } from "@/components/providers/app-provider";
+
+export function AttendanceLogger() {
+  const { activeCompanyId, config, employees, attendance, handleAttendanceChange: onAttendanceChange } = useAppContext();
+  const activeFinancialYear = config.financialYear;
   const { toast } = useToast();
+  const { isAdmin, isSupervisor, isAccountant } = useRole(activeCompanyId);
   const [editingDialogId, setEditingDialogId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newEntryEmployeeId, setNewEntryEmployeeId] = useState("");
@@ -71,13 +95,15 @@ export function AttendanceLogger({
     fromDate: "",
     toDate: "",
     shift: "9-hour",
+    clockIn: "",
+    clockOut: "",
     hours: 9,
     totalWage: "",
     incentive: 0,
     weeklyAdvance: 0,
     loan: 0,
   });
-  const [entries, setEntries] = useState<any[]>([]);
+  const [entries, setEntries] = useState<AttendanceRecord[]>([]);
   const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
@@ -99,6 +125,8 @@ export function AttendanceLogger({
           ...emp,
           date: initialDate,
           shift: emp.shift as '9-hour' | '12-hour',
+          clockIn: "",
+          clockOut: "",
           hours: emp.shift === '12-hour' ? 12 : 9,
           incentive: 0,
           weeklyAdvance: 0,
@@ -128,7 +156,7 @@ export function AttendanceLogger({
         }
 
         const refId = entry.employeeRefId || entry.id.split('-')[0];
-        const emp = currentEmployees.find((e: any) => e.id === refId);
+        const emp = currentEmployees.find((e: Employee) => e.id === refId);
         if (emp && (emp.rate !== entry.rate || emp.name !== entry.name || emp.role !== entry.role)) {
           needsUpdate = true;
           updated.rate = emp.rate;
@@ -533,7 +561,7 @@ export function AttendanceLogger({
   const handleAddAttendance = () => {
     if (!newEntryEmployeeId) return;
     const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
-    const emp = currentEmployees.find((e: any) => e.id === newEntryEmployeeId);
+    const emp = currentEmployees.find((e: Employee) => e.id === newEntryEmployeeId);
     if (!emp) return;
 
     const dateStr = newEntryDetails.fromDate === newEntryDetails.toDate 
@@ -562,6 +590,8 @@ export function AttendanceLogger({
         employeeRefId: emp.id,
         date: dateStr,
         shift: newEntryDetails.shift as '9-hour' | '12-hour',
+        clockIn: newEntryDetails.clockIn,
+        clockOut: newEntryDetails.clockOut,
         hours: newEntryDetails.hours,
         incentive: newEntryDetails.incentive,
         weeklyAdvance: newEntryDetails.weeklyAdvance,
@@ -579,6 +609,8 @@ export function AttendanceLogger({
         employeeRefId: emp.id,
         date: dateStr,
         shift: newEntryDetails.shift as '9-hour' | '12-hour',
+        clockIn: newEntryDetails.clockIn,
+        clockOut: newEntryDetails.clockOut,
         hours: newEntryDetails.hours,
         incentive: newEntryDetails.incentive,
         weeklyAdvance: newEntryDetails.weeklyAdvance,
@@ -704,6 +736,8 @@ export function AttendanceLogger({
                 fromDate: `${selectedYear}-${monthStr}-${dayStr}`,
                 toDate: `${selectedYear}-${monthStr}-${dayStr}`,
                 shift: "9-hour",
+                clockIn: "",
+                clockOut: "",
                 hours: 9,
                 totalWage: "",
                 incentive: 0,
@@ -713,6 +747,7 @@ export function AttendanceLogger({
               setNewEntryEmployeeId("");
               setIsAddDialogOpen(true);
             }}
+            disabled={isAccountant}
             className="border-primary/30 hover:bg-primary/10 font-bold"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -721,6 +756,7 @@ export function AttendanceLogger({
           <Button 
             variant="default" 
             size="sm" 
+            disabled={isAccountant}
             onClick={handleFinalize} 
             className="bg-primary hover:bg-primary/90"
           >
@@ -745,6 +781,7 @@ export function AttendanceLogger({
               <Select 
                 value={bulkShift} 
                 onValueChange={(val) => setBulkShift(val as any)}
+                disabled={isAccountant}
               >
                 <SelectTrigger className="w-[180px] h-10 bg-background border-primary/30 font-bold">
                   <SelectValue placeholder="Select Shift" />
@@ -758,6 +795,7 @@ export function AttendanceLogger({
             <Button 
               variant="default" 
               size="sm" 
+              disabled={isAccountant}
               className="bg-primary text-primary-foreground h-10 px-6 self-end font-bold"
               onClick={applyBulkSettings}
             >
@@ -786,14 +824,16 @@ export function AttendanceLogger({
               <th className="p-4 min-w-[160px] text-foreground text-left">Entry Date</th>
               <th className="p-4 min-w-[200px] text-foreground text-left">Labourer Details</th>
               <th className="p-4 min-w-[150px] text-foreground text-left">Shift Type</th>
-              <th className="p-4 min-w-[120px] text-primary text-left">Total Days</th>
-              <th className="p-4 min-w-[140px] text-green-500 text-left">Incentive (+)</th>
-              <th className="p-4 min-w-[140px] text-destructive text-left">Weekly Adv (-)</th>
+              <th className="p-4 min-w-[100px] text-foreground text-left">Clock In</th>
+              <th className="p-4 min-w-[100px] text-foreground text-left">Clock Out</th>
+              <th className="p-4 min-w-[100px] text-primary text-left">Total Days</th>
+              <th className="p-4 min-w-[120px] text-green-500 text-left">Incentive (+)</th>
+              <th className="p-4 min-w-[120px] text-destructive text-left">Weekly Adv (-)</th>
               <th className="p-4 min-w-[140px] text-destructive text-left">Loan (-)</th>
               <th className="p-4 min-w-[100px] text-muted-foreground text-left">Roundoff</th>
               <th className="p-4 min-w-[120px] text-accent text-left">Net Payout</th>
               <th className="p-4 min-w-[100px] text-center text-foreground">Status</th>
-              <th className="p-4 text-right text-foreground">Action</th>
+              {(isAdmin || isSupervisor) && <th className="p-4 text-right text-foreground">Action</th>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -842,7 +882,7 @@ export function AttendanceLogger({
                         value={entry.shift} 
                         onValueChange={(val) => {
                           const hrs = val === '12-hour' ? 12 : 9;
-                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, shift: val, hours: hrs, isModified: true } : item));
+                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, shift: val as '9-hour' | '12-hour', hours: hrs, isModified: true } : item));
                         }}
                       >
                         <SelectTrigger className="h-11 bg-background border-muted w-[130px]">
@@ -864,8 +904,68 @@ export function AttendanceLogger({
                   </TableCell>
                   <TableCell>
                     <Input 
+                      type="time" 
+                      value={entry.clockIn || ""} 
+                      disabled={!isEditing}
+                      className="h-11 bg-background border-muted w-[110px]"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEntries(prev => prev.map(item => {
+                          if (item.id === entry.id) {
+                            const newClockIn = val;
+                            const clockOut = item.clockOut || "18:00";
+                            const shiftHrs = item.shift === '12-hour' ? 12 : 9;
+                            let newHours = item.hours;
+                            if (newClockIn && clockOut) {
+                              const [inH, inM] = newClockIn.split(':').map(Number);
+                              const [outH, outM] = clockOut.split(':').map(Number);
+                              let d1 = new Date(); d1.setHours(inH, inM, 0, 0);
+                              let d2 = new Date(); d2.setHours(outH, outM, 0, 0);
+                              if (d2 < d1) d2.setDate(d2.getDate() + 1);
+                              const diff = (d2.getTime() - d1.getTime()) / 3600000;
+                              newHours = Number((diff / shiftHrs).toFixed(2));
+                            }
+                            return { ...item, clockIn: newClockIn, hours: newHours, isModified: true };
+                          }
+                          return item;
+                        }));
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input 
+                      type="time" 
+                      value={entry.clockOut || ""} 
+                      disabled={!isEditing}
+                      className="h-11 bg-background border-muted w-[110px]"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEntries(prev => prev.map(item => {
+                          if (item.id === entry.id) {
+                            const newClockOut = val;
+                            const clockIn = item.clockIn || "09:00";
+                            const shiftHrs = item.shift === '12-hour' ? 12 : 9;
+                            let newHours = item.hours;
+                            if (clockIn && newClockOut) {
+                              const [inH, inM] = clockIn.split(':').map(Number);
+                              const [outH, outM] = newClockOut.split(':').map(Number);
+                              let d1 = new Date(); d1.setHours(inH, inM, 0, 0);
+                              let d2 = new Date(); d2.setHours(outH, outM, 0, 0);
+                              if (d2 < d1) d2.setDate(d2.getDate() + 1);
+                              const diff = (d2.getTime() - d1.getTime()) / 3600000;
+                              newHours = Number((diff / shiftHrs).toFixed(2));
+                            }
+                            return { ...item, clockOut: newClockOut, hours: newHours, isModified: true };
+                          }
+                          return item;
+                        }));
+                      }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input 
                       type="number" 
-                      step="0.5"
+                      step="0.1"
                       value={entry.hours} 
                       disabled={!isEditing}
                       className="h-11 bg-primary/5 border-primary/20 focus-visible:ring-primary font-mono text-base font-bold text-primary w-24"
@@ -938,13 +1038,15 @@ export function AttendanceLogger({
                           ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20" 
                           : "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20"
                       )}
+                      disabled={isAccountant}
                       onClick={() => togglePaymentStatus(entry.employeeRefId || entry.id.split('-')[0])}
                     >
                       {paymentStatuses[entry.employeeRefId || entry.id.split('-')[0]] === 'Paid' ? 'Paid' : 'Unpaid'}
                     </Button>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                  {(isAdmin || isSupervisor) && (
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
                         <Button 
                           variant="ghost" 
                           size="sm" 
@@ -957,6 +1059,8 @@ export function AttendanceLogger({
                               fromDate: parts[0].trim(),
                               toDate: (parts[1] || parts[0]).trim(),
                               shift: entry.shift,
+                              clockIn: entry.clockIn || "",
+                              clockOut: entry.clockOut || "",
                               hours: entry.hours,
                               totalWage: "",
                               incentive: entry.incentive,
@@ -969,36 +1073,37 @@ export function AttendanceLogger({
                           <Edit2 className="w-4 h-4" />
                         </Button>
                       
-                      <ConfirmDialog>
-                        <ConfirmTrigger asChild>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-9 w-9 hover:bg-destructive/20 hover:text-destructive p-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </ConfirmTrigger>
-                        <ConfirmContent className="bg-card border-border">
-                          <ConfirmHeader>
-                            <ConfirmTitle>Remove Entry?</ConfirmTitle>
-                            <ConfirmDescription>
-                              This will remove {entry.name}&apos;s log for {entry.date}.
-                            </ConfirmDescription>
-                          </ConfirmHeader>
-                          <ConfirmFooter>
-                            <ConfirmCancel className="border-border">Cancel</ConfirmCancel>
-                            <ConfirmAction 
-                              onClick={() => handleDeleteRow(entry.id)}
-                              className="bg-destructive hover:bg-destructive/90 text-white"
+                        <ConfirmDialog>
+                          <ConfirmTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-9 w-9 hover:bg-destructive/20 hover:text-destructive p-0"
                             >
-                              Remove
-                            </ConfirmAction>
-                          </ConfirmFooter>
-                        </ConfirmContent>
-                      </ConfirmDialog>
-                    </div>
-                  </TableCell>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </ConfirmTrigger>
+                          <ConfirmContent className="bg-card border-border">
+                            <ConfirmHeader>
+                              <ConfirmTitle>Remove Entry?</ConfirmTitle>
+                              <ConfirmDescription>
+                                This will remove {entry.name}&apos;s log for {entry.date}.
+                              </ConfirmDescription>
+                            </ConfirmHeader>
+                            <ConfirmFooter>
+                              <ConfirmCancel className="border-border">Cancel</ConfirmCancel>
+                              <ConfirmAction 
+                                onClick={() => handleDeleteRow(entry.id)}
+                                className="bg-destructive hover:bg-destructive/90 text-white"
+                              >
+                                Remove
+                              </ConfirmAction>
+                            </ConfirmFooter>
+                          </ConfirmContent>
+                        </ConfirmDialog>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
@@ -1138,6 +1243,24 @@ export function AttendanceLogger({
                   </SelectContent>
                 </Select>
               </div>
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold">Clock In</label>
+                <Input 
+                  type="time" 
+                  value={newEntryDetails.clockIn} 
+                  onChange={e => setNewEntryDetails(p => ({ ...p, clockIn: e.target.value }))}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold">Clock Out</label>
+                <Input 
+                  type="time" 
+                  value={newEntryDetails.clockOut} 
+                  onChange={e => setNewEntryDetails(p => ({ ...p, clockOut: e.target.value }))}
+                />
+              </div>
+
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-accent">Total Wage (₹)</label>
                 <Input 

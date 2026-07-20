@@ -4,20 +4,22 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { payrollAuditAssistant, type PayrollAuditOutput } from "@/ai/flows/payroll-audit-assistant-flow";
-import { EMPLOYEES } from "@/lib/mock-data";
 import { Sparkles, Loader2, AlertTriangle, TrendingUp, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+import { useAppContext } from "@/components/providers/app-provider";
+
 export function PayrollAuditTool() {
+  const { employees } = useAppContext();
   const [isAuditing, setIsAuditing] = useState(false);
   const [results, setResults] = useState<PayrollAuditOutput | null>(null);
 
   const runAudit = async () => {
     setIsAuditing(true);
     try {
-      // Prepare mock historical data for the AI
-      const mockHistoricalData = EMPLOYEES.map(emp => ({
+      // Prepare historical data for the AI using real employees from context
+      const mockHistoricalData = employees.map((emp: any) => ({
         employeeId: emp.id,
         employeeName: emp.name,
         hourlyRate: emp.rate,

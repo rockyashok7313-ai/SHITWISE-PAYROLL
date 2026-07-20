@@ -1,12 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, Users, IndianRupee, TrendingUp } from "lucide-react";
 
-export interface ShiftStatsProps {
-  employees?: any[];
-  attendance?: any[];
-}
+import { useAppContext } from "@/components/providers/app-provider";
+import { TiltCard } from "@/components/ui/tilt-card";
 
-export function ShiftStats({ employees = [], attendance = [] }: ShiftStatsProps) {
+export function ShiftStats() {
+  const { employees = [], attendance = [] } = useAppContext();
   const activeEmployees = employees.length;
   const hoursToday = attendance.reduce((acc, curr) => acc + (curr.hours || 0), 0);
   
@@ -28,17 +27,19 @@ export function ShiftStats({ employees = [], attendance = [] }: ShiftStatsProps)
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       {stats.map((stat, i) => (
-        <Card key={i} className="bg-card/50 border-border hover:border-primary/50 transition-colors">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-            <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              {stat.label}
-            </CardTitle>
-            <stat.icon className={`h-4 w-4 ${stat.accent}`} />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-headline font-bold">{stat.value}</div>
-          </CardContent>
-        </Card>
+        <TiltCard key={i}>
+          <Card className="bg-card/50 border-border hover:border-primary/50 transition-colors h-full">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                {stat.label}
+              </CardTitle>
+              <stat.icon className={`h-4 w-4 ${stat.accent}`} />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-headline font-bold font-mono">{stat.value}</div>
+            </CardContent>
+          </Card>
+        </TiltCard>
       ))}
     </div>
   );

@@ -66,44 +66,20 @@ const PayrollAuditOutputSchema = z.object({
 export type PayrollAuditOutput = z.infer<typeof PayrollAuditOutputSchema>;
 
 export async function payrollAuditAssistant(input: PayrollAuditInput): Promise<PayrollAuditOutput> {
-  // Simulate network/AI response latency
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  const response = await fetch('/api/gemini-audit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  });
 
-  return {
-    summary: "The payroll audit for the period of Oct 1st to Oct 3rd, 2023, shows high compliance but identifies 2 unusual shift patterns and 1 potential overpayment discrepancy. Labor costs are projected to stabilize in the next quarter.",
-    unusualShiftPatterns: [
-      {
-        employeeId: "emp-1",
-        employeeName: "Rajesh Kumar",
-        patternDescription: "Excessive shift length exceeding the standard 12-hour shift on Oct 3rd.",
-        exampleDates: ["2023-10-03"]
-      },
-      {
-        employeeId: "emp-3",
-        employeeName: "Sunita Devi",
-        patternDescription: "Inconsistent shift duration, clocking under 12 hours on Oct 2nd.",
-        exampleDates: ["2023-10-02"]
-      }
-    ],
-    potentialPayrollDiscrepancies: [
-      {
-        employeeId: "emp-1",
-        employeeName: "Rajesh Kumar",
-        date: "2023-10-03",
-        discrepancyType: "Unapproved Overtime",
-        details: "Worked 13.25 hours instead of the scheduled 12 hours. Calculated overtime payout discrepancy of ₹350.",
-        suggestedAction: "Verify supervisor authorization for the extra 1.25 hours."
-      }
-    ],
-    costForecast: {
-      period: "Next 3 months",
-      totalEstimatedLaborCost: 425000,
-      monthlyBreakdown: [
-        { month: "2023-11", estimatedCost: 140000 },
-        { month: "2023-12", estimatedCost: 142000 },
-        { month: "2024-01", estimatedCost: 143000 }
-      ],
-      notes: "Cost forecast is calculated based on current employee rates and standard shift distribution."
-    }
-  };
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error("Error invoking audit api:", data.error);
+    throw new Error(data.error || "Failed to audit payroll data.");
+  }
+
+  return data as PayrollAuditOutput;
 }

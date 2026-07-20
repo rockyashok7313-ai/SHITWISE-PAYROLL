@@ -12,21 +12,16 @@ import { Save, Factory, Clock, IndianRupee, ShieldCheck, CalendarRange, Download
 import { supabase } from "@/lib/supabase";
 
 interface FactorySettingsProps {
-  config: {
-    companyName: string;
-    factoryUnit: string;
-    standardShiftHours: number;
-    factoryShiftHours: number;
-    defaultIncentive: number;
-    currency: string;
-    financialYear: string;
-  };
-  activeCompanyId: string;
-  onSave: (newConfig: any) => void;
-  onDelete: (id: string) => void;
+  // Now using AppContext
 }
 
-export function FactorySettings({ config: propConfig, activeCompanyId, onSave, onDelete }: FactorySettingsProps) {
+import { useAppContext } from "@/components/providers/app-provider";
+import { useRole } from "@/hooks/use-role";
+
+export function FactorySettings() {
+  const { config: propConfig, activeCompanyId, handleConfigSave: onSave } = useAppContext();
+  const { isAccountant } = useRole(activeCompanyId);
+  const onDelete = (id: string) => { console.log("Delete not implemented", id) };
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [config, setConfig] = useState(propConfig);
@@ -429,7 +424,7 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Updating the Financial Year affects statutory reports, bonus calculations, and seasonal trend analysis.
               </p>
-              <Button onClick={handleSave} className="w-full bg-primary hover:bg-primary/90">
+              <Button onClick={handleSave} disabled={isAccountant} className="w-full bg-primary hover:bg-primary/90">
                 <Save className="w-4 h-4 mr-2" />
                 Save Changes
               </Button>
@@ -457,6 +452,7 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
               <Button 
                 onClick={() => fileInputRef.current?.click()} 
                 variant="outline" 
+                disabled={isAccountant}
                 className="w-full border-border hover:bg-accent/5 justify-start"
               >
                 <Upload className="w-4 h-4 mr-2 text-primary" />
@@ -477,6 +473,7 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
                     }
                   }} 
                   variant="destructive" 
+                  disabled={isAccountant}
                   className="w-full justify-start bg-red-950/40 text-red-500 hover:bg-red-900/60 border border-red-900/50 mb-3"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
@@ -484,7 +481,8 @@ export function FactorySettings({ config: propConfig, activeCompanyId, onSave, o
                 </Button>
                 
                 <Button 
-                  onClick={handleWipeData} 
+                  onClick={handleWipeData}
+                  disabled={isAccountant} 
                   variant="destructive" 
                   className="w-full justify-start bg-red-950/40 text-red-500 hover:bg-red-900/60 border border-red-900/50"
                 >

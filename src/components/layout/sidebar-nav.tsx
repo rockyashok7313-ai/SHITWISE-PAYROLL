@@ -9,7 +9,8 @@ import {
   FileSpreadsheet, 
   Settings,
   Plus,
-  LogOut
+  LogOut,
+  Shield
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
-export type TabValue = "dashboard" | "attendance" | "employees" | "audit" | "reports" | "settings";
+export type TabValue = "dashboard" | "attendance" | "employees" | "audit" | "reports" | "settings" | "team" | "system-logs";
 
 const NAV_ITEMS: { label: string; icon: any; value: TabValue }[] = [
   { label: "Dashboard", icon: LayoutDashboard, value: "dashboard" },
@@ -26,6 +27,8 @@ const NAV_ITEMS: { label: string; icon: any; value: TabValue }[] = [
   { label: "Employee Profiles", icon: Users, value: "employees" },
   { label: "Audit Assistant", icon: ShieldCheck, value: "audit" },
   { label: "Payroll Reports", icon: FileSpreadsheet, value: "reports" },
+  { label: "Team Management", icon: Shield, value: "team" },
+  { label: "System Logs", icon: FileSpreadsheet, value: "system-logs" },
 ];
 
 interface SidebarNavProps {

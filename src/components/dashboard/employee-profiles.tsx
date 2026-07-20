@@ -41,11 +41,14 @@ interface Employee {
 }
 
 interface EmployeeProfilesProps {
-  employees: Employee[];
-  onEmployeesChange: (employees: Employee[]) => void;
+  // Now using AppContext
 }
+import { useAppContext } from "@/components/providers/app-provider";
+import { useRole } from "@/hooks/use-role";
 
-export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }: EmployeeProfilesProps) {
+export function EmployeeProfiles() {
+  const { activeCompanyId, employees: propEmployees, handleEmployeesChange: onEmployeesChange } = useAppContext();
+  const { isAccountant } = useRole(activeCompanyId);
   const { toast } = useToast();
   const [employees, setEmployees] = useState<Employee[]>(propEmployees);
   const [searchQuery, setSearchQuery] = useState("");
@@ -205,13 +208,14 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                 className="pl-9 h-10 w-full sm:w-[250px] bg-background/50 border-border focus-visible:ring-accent"
               />
             </div>
-            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-10">
-                  <Plus className="w-4 h-4 sm:mr-2" />
-                  <span className="hidden sm:inline">Add Staff Member</span>
-                </Button>
-              </DialogTrigger>
+            {!isAccountant && (
+              <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-accent text-accent-foreground hover:bg-accent/90 h-10">
+                    <Plus className="w-4 h-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Add Staff Member</span>
+                  </Button>
+                </DialogTrigger>
             <DialogContent className="sm:max-w-[600px] bg-card border-border max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="font-headline">Add New Staff Member</DialogTitle>
@@ -401,7 +405,8 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                 </Button>
               </DialogFooter>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -526,7 +531,8 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                             </DialogContent>
                           </Dialog>
 
-                          <Dialog>
+                          {!isAccountant && (
+                            <Dialog>
                             <DialogTrigger asChild>
                               <Button 
                                 variant="ghost" 
@@ -786,8 +792,10 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                               </DialogFooter>
                             </DialogContent>
                           </Dialog>
+                          )}
 
-                          <AlertDialog>
+                          {!isAccountant && (
+                            <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button 
                                 variant="ghost" 
@@ -816,6 +824,7 @@ export function EmployeeProfiles({ employees: propEmployees, onEmployeesChange }
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

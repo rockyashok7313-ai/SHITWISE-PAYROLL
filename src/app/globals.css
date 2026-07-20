@@ -24,6 +24,10 @@
     --input: 225 17% 18%;
     --ring: 226 87% 66%;
     --radius: 0.25rem;
+    
+    --metal-highlight: #C7CDD9;
+    --warning-amber: #F2A65A;
+    --success-teal: #2DD4BF;
 
     --sidebar-background: 225 17% 5%;
     --sidebar-foreground: 225 10% 80%;

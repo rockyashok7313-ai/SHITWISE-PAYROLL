@@ -12,6 +12,7 @@ export default {
       fontFamily: {
         body: ['Inter', 'sans-serif'],
         headline: ['Space Grotesk', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
         code: ['monospace'],
       },
       colors: {
@@ -48,6 +49,15 @@ export default {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+        metal: {
+          highlight: 'var(--metal-highlight)',
+        },
+        warning: {
+          amber: 'var(--warning-amber)',
+        },
+        success: {
+          teal: 'var(--success-teal)',
+        },
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',

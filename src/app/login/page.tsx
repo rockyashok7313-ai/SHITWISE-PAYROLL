@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
 import { Lock, Mail, Factory, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
+
+const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -70,14 +73,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Decorative ambient elements */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-accent/5 blur-[120px] pointer-events-none" />
-      
-      <Card className="w-full max-w-md relative z-10 border-border/50 shadow-2xl bg-card/60 backdrop-blur-xl">
-        <CardHeader className="space-y-4 text-center pb-8 pt-8">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-inner">
+    <div className="min-h-screen flex items-center justify-center p-4 relative">
+      <LoginBackground />
+      <Card className="w-full max-w-md bg-card/60 backdrop-blur-xl border-border relative z-10 shadow-2xl">
+        <CardHeader className="space-y-2 text-center pb-8 pt-8">
+          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 border border-primary/20">
             <Factory className="w-8 h-8 text-primary" />
           </div>
           <div className="space-y-2">
