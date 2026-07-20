@@ -30,6 +30,11 @@ const items = [
     icon: ShieldCheck,
   },
   {
+    title: "Activity",
+    href: "/activity",
+    icon: History,
+  },
+  {
     title: "Reports",
     href: "/reports",
     icon: FileSpreadsheet,
