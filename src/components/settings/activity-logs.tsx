@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAppContext } from "@/components/providers/app-provider";
 import { supabase } from "@/lib/supabase";
-import { History, Activity, Clock, Trash2, Edit2, PlusCircle, ArrowRight, User } from "lucide-react";
+import { History as HistoryIcon, Activity, Clock, Trash2, Edit2, PlusCircle, ArrowRight, User } from "lucide-react";
 import { format } from "date-fns";
 import { useRole } from "@/hooks/use-role";
 import {
@@ -152,7 +152,7 @@ export function ActivityLogs() {
   if (!isAdmin && !isSupervisor) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center border rounded-xl bg-card/30">
-        <History className="w-12 h-12 text-muted-foreground mb-4" />
+        <HistoryIcon className="w-12 h-12 text-muted-foreground mb-4" />
         <h3 className="text-lg font-semibold text-foreground">Access Denied</h3>
         <p className="text-muted-foreground mt-2 max-w-sm">
           You need Administrator or Supervisor privileges to view the system activity logs.
@@ -194,7 +194,7 @@ export function ActivityLogs() {
             </div>
           ) : logs.length === 0 ? (
             <div className="p-12 text-center">
-              <History className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
+              <HistoryIcon className="w-10 h-10 text-muted-foreground/50 mx-auto mb-3" />
               <h3 className="text-lg font-medium text-foreground">No activity found</h3>
               <p className="text-sm text-muted-foreground mt-1">No recorded changes match your current filters.</p>
             </div>
