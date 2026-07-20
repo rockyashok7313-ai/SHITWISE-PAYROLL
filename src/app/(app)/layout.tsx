@@ -3,7 +3,7 @@
 import React from "react";
 import { AppProvider } from "@/components/providers/app-provider";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
-import { Clock, ShieldCheck, History as HistoryIcon, Users, FileSpreadsheet, LayoutDashboard, Settings } from "lucide-react";
+import { Clock, ShieldCheck, History as HistoryIcon, Users, FileSpreadsheet, LayoutDashboard, Settings, ReceiptText } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,11 @@ const items = [
     title: "Employees",
     href: "/employees",
     icon: Users,
+  },
+  {
+    title: "Vouchers",
+    href: "/vouchers",
+    icon: ReceiptText,
   },
   {
     title: "AI Audit",
