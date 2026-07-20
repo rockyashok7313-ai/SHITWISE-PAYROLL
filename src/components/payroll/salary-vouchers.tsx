@@ -114,29 +114,6 @@ export function SalaryVouchers() {
           </h2>
           <p className="text-sm text-muted-foreground">Generate and manage payment vouchers</p>
         </div>
-        
-        <div className="flex items-center gap-3">
-          <Select value={voucherMonth} onValueChange={setVoucherMonth}>
-            <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Month" />
-            </SelectTrigger>
-            <SelectContent>
-              {MONTHS.map(m => (
-                <SelectItem key={m} value={m}>{m}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={voucherYear} onValueChange={setVoucherYear}>
-            <SelectTrigger className="w-[100px]">
-              <SelectValue placeholder="Year" />
-            </SelectTrigger>
-            <SelectContent>
-              {YEARS.map(y => (
-                <SelectItem key={y} value={y}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -175,6 +152,36 @@ export function SalaryVouchers() {
                 </SelectContent>
               </Select>
             </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground">Month</Label>
+                <Select value={voucherMonth} onValueChange={setVoucherMonth}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MONTHS.map(m => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-muted-foreground">Year</Label>
+                <Select value={voucherYear} onValueChange={setVoucherYear}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {YEARS.map(y => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-muted-foreground">Amount (₹)</Label>
               <Input 
