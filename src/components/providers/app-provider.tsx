@@ -114,9 +114,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let activeId = localStorage.getItem("active_company_id") || "";
 
       if (parsedCompanies.length === 0) {
+        const { data: { user } } = await supabase.auth.getUser();
         const newId = `co_${Date.now()}`;
         const defaultCompany = {
           id: newId,
+          owner_id: user?.id || "",
           name: "ShiftWise Systems Ltd",
           unit: "Unit #1 - Manufacturing",
           standard_shift_hours: 9,
@@ -326,9 +328,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const handleCreateCompany = async (details: { name: string; unit: string; financialYear: string }) => {
+    const { data: { user } } = await supabase.auth.getUser();
     const newId = `co_${Date.now()}`;
     const newCompanyObj = {
       id: newId,
+      owner_id: user?.id || "",
       name: details.name,
       unit: details.unit,
       standard_shift_hours: 9,
