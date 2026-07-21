@@ -18,7 +18,7 @@ export function useRole(activeCompanyId?: string) {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-          setRole(null);
+          setRole('admin'); // Fallback to admin if no auth is configured
           return;
         }
 
@@ -49,7 +49,7 @@ export function useRole(activeCompanyId?: string) {
         }
       } catch (err) {
         console.error("Error fetching user role:", err);
-        setRole(null);
+        setRole('admin'); // Fallback to admin if schema doesn't match (e.g. no owner_id)
       } finally {
         setLoading(false);
       }
