@@ -812,7 +812,7 @@ export function AttendanceLogger() {
               <th className="p-4 min-w-[100px] text-muted-foreground text-left">Roundoff</th>
               <th className="p-4 min-w-[120px] text-accent text-left">Net Payout</th>
               <th className="p-4 min-w-[100px] text-center text-foreground">Status</th>
-              {(isAdmin || isSupervisor) && <th className="p-4 text-right text-foreground">Action</th>}
+              <th className="p-4 text-right text-foreground">Action</th>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1023,7 +1023,6 @@ export function AttendanceLogger() {
                       {paymentStatuses[entry.employeeRefId || entry.id.split('-')[0]] === 'Paid' ? 'Paid' : 'Unpaid'}
                     </Button>
                   </TableCell>
-                  {(isAdmin || isSupervisor) && (
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button 
@@ -1082,7 +1081,6 @@ export function AttendanceLogger() {
                         </ConfirmDialog>
                       </div>
                     </TableCell>
-                  )}
                 </TableRow>
               );
             })}
