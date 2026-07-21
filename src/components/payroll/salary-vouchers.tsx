@@ -22,7 +22,7 @@ const YEARS = ["2023", "2024", "2025", "2026", "2027"];
 
 export function SalaryVouchers() {
   const { config, employees, attendance, vouchers, handleCreateVoucher, handleDeleteVoucher } = useAppContext();
-  const activeFinancialYear = config.financialYear;
+  const activeFinancialYear = config?.financialYear || "2026-2027";
   const { toast } = useToast();
   
   const [voucherMonth, setVoucherMonth] = useState<string>(MONTHS[new Date().getMonth()]);
@@ -33,7 +33,8 @@ export function SalaryVouchers() {
   const [voucherRemarks, setVoucherRemarks] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const periodVouchers = vouchers.filter((v: any) => v.month === `${voucherMonth} ${voucherYear}`);
+  const safeVouchers = vouchers || [];
+  const periodVouchers = safeVouchers.filter((v: any) => v.month === `${voucherMonth} ${voucherYear}`);
   const bankTotal = periodVouchers.filter((v: any) => v.paymentMethod === 'Bank').reduce((sum, v) => sum + Number(v.amount), 0);
   const cashTotal = periodVouchers.filter((v: any) => v.paymentMethod === 'Cash').reduce((sum, v) => sum + Number(v.amount), 0);
 
@@ -48,8 +49,9 @@ export function SalaryVouchers() {
     const mm = monthIndex.toString().padStart(2, '0');
     const prefix = `${voucherYear}-${mm}`;
 
-    const records = attendance.filter(a => 
-      a.employeeRefId === voucherEmployee && a.date.startsWith(prefix)
+    const safeAttendance = attendance || [];
+    const records = safeAttendance.filter(a => 
+      a.employeeRefId === voucherEmployee && a.date && a.date.startsWith(prefix)
     );
 
     let totalNet = 0;
