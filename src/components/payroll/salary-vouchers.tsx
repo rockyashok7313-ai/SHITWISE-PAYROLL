@@ -87,6 +87,14 @@ export function SalaryVouchers() {
       return;
     }
 
+    const targetMonthStr = `${voucherMonth} ${voucherYear}`;
+    const alreadyExists = safeVouchers.some((v: any) => v.employeeId === voucherEmployee && v.month === targetMonthStr);
+    
+    if (alreadyExists) {
+      toast({ variant: "destructive", title: "Duplicate Voucher", description: "A voucher has already been generated for this employee for the selected month." });
+      return;
+    }
+
     try {
       await handleCreateVoucher({
         employeeId: voucherEmployee,
