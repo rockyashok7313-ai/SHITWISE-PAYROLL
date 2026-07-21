@@ -94,7 +94,17 @@ export function SalaryVouchers() {
         remarks: voucherRemarks
       });
       
-      toast({ title: "Success", description: "Voucher generated successfully." });
+      try {
+        const statusKey = `payroll_status_${activeFinancialYear}_${voucherMonth}_${voucherYear}`;
+        const existingStatuses = localStorage.getItem(statusKey);
+        const statuses = existingStatuses ? JSON.parse(existingStatuses) : {};
+        statuses[voucherEmployee] = 'Paid';
+        localStorage.setItem(statusKey, JSON.stringify(statuses));
+      } catch (err) {
+        console.error("Failed to mark employee as Paid", err);
+      }
+      
+      toast({ title: "Success", description: "Voucher generated successfully and marked as Paid." });
       setVoucherEmployee("");
       setVoucherAmount("");
       setVoucherRemarks("");
