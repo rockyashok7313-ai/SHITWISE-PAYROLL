@@ -28,6 +28,7 @@ export function SalaryVouchers() {
   const [voucherMonth, setVoucherMonth] = useState<string>(MONTHS[new Date().getMonth()]);
   const [voucherYear, setVoucherYear] = useState<string>(activeFinancialYear.split('-')[0]);
   const [voucherEmployee, setVoucherEmployee] = useState<string>("");
+  const [voucherDate, setVoucherDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [voucherAmount, setVoucherAmount] = useState<string>("");
   const [voucherMethod, setVoucherMethod] = useState<'Bank' | 'Cash'>('Bank');
   const [voucherRemarks, setVoucherRemarks] = useState<string>("");
@@ -87,6 +88,7 @@ export function SalaryVouchers() {
         employeeId: voucherEmployee,
         employeeName: employees.find(e => e.id === voucherEmployee)?.name || 'Unknown',
         month: `${voucherMonth} ${voucherYear}`,
+        date: voucherDate,
         amount: voucherAmount,
         paymentMethod: voucherMethod,
         remarks: voucherRemarks
@@ -185,6 +187,15 @@ export function SalaryVouchers() {
             </div>
 
             <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-muted-foreground">Voucher Date</Label>
+              <Input 
+                type="date"
+                value={voucherDate}
+                onChange={e => setVoucherDate(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-xs font-bold text-muted-foreground">Amount (₹)</Label>
               <Input 
                 type="number" 
@@ -248,8 +259,12 @@ export function SalaryVouchers() {
           
           <div className="col-span-1 lg:col-span-2">
             <Card className="h-full">
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm">Voucher History ({voucherMonth} {voucherYear})</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => window.print()} className="h-8">
+                  <Printer className="w-3.5 h-3.5 mr-2" />
+                  Print List
+                </Button>
               </CardHeader>
               <CardContent>
                 {periodVouchers.length === 0 ? (
@@ -273,7 +288,7 @@ export function SalaryVouchers() {
                         {periodVouchers.map((v: any) => (
                           <TableRow key={v.id}>
                             <TableCell className="text-xs text-muted-foreground">
-                              {new Date(v.createdAt).toLocaleDateString()}
+                              {v.date ? new Date(v.date).toLocaleDateString() : 'N/A'}
                             </TableCell>
                             <TableCell className="font-medium text-sm">
                               {v.employeeName}
