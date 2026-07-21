@@ -20,6 +20,7 @@ interface AppContextType {
   handleEmployeesChange: (newEmployees: any[]) => Promise<void>;
   handleConfigSave: (newConfig: any) => Promise<void>;
   handleCreateVoucher: (voucher: any) => Promise<void>;
+  handleUpdateVoucher: (id: string, updates: any) => Promise<void>;
   handleDeleteVoucher: (id: string) => Promise<void>;
 }
 
@@ -471,6 +472,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
   };
 
+  const handleUpdateVoucher = async (id: string, updates: any) => {
+    if (isAccountant) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
+      return;
+    }
+    if (!activeCompanyId) return;
+    const updated = vouchers.map((v: any) => v.id === id ? { ...v, ...updates } : v);
+    setVouchers(updated);
+    localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+  };
+
   const handleDeleteVoucher = async (id: string) => {
     if (isAccountant) {
       toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
@@ -497,6 +509,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       handleEmployeesChange,
       handleConfigSave,
       handleCreateVoucher,
+      handleUpdateVoucher,
       handleDeleteVoucher,
     }}>
       {children}

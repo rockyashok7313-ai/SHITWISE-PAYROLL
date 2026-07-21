@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ReceiptText, Trash2, Printer, Search, Download } from "lucide-react";
+import { ReceiptText, Trash2, Printer, Search, Download, Edit2 } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +21,7 @@ const MONTHS = [
 const YEARS = ["2023", "2024", "2025", "2026", "2027"];
 
 export function SalaryVouchers() {
-  const { config, employees, attendance, vouchers, handleCreateVoucher, handleDeleteVoucher } = useAppContext();
+  const { config, employees, attendance, vouchers, handleCreateVoucher, handleUpdateVoucher, handleDeleteVoucher } = useAppContext();
   const activeFinancialYear = config?.financialYear || "2026-2027";
   const { toast } = useToast();
   
@@ -37,6 +37,7 @@ export function SalaryVouchers() {
   const [historyMonth, setHistoryMonth] = useState<string>(MONTHS[new Date().getMonth()]);
   const [historyYear, setHistoryYear] = useState<string>(activeFinancialYear.split('-')[0]);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [editingVoucherId, setEditingVoucherId] = useState<string | null>(null);
 
   const safeVouchers = vouchers || [];
   const periodVouchers = safeVouchers.filter((v: any) => v.month === `${historyMonth} ${historyYear}`);
@@ -45,7 +46,7 @@ export function SalaryVouchers() {
 
   // Auto-calculate voucher amount based on selected employee and month
   useEffect(() => {
-    if (!voucherEmployee || !voucherMonth || !voucherYear) return;
+    if (!voucherEmployee || !voucherMonth || !voucherYear || editingVoucherId) return;
 
     const emp = employees.find(e => e.id === voucherEmployee);
     if (!emp) return;
@@ -123,6 +124,53 @@ export function SalaryVouchers() {
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message || "Failed to generate voucher." });
     }
+  };
+
+  const onUpdateVoucher = async () => {
+    if (!editingVoucherId || !voucherEmployee || !voucherAmount || isNaN(Number(voucherAmount))) {
+      toast({ variant: "destructive", title: "Invalid Input", description: "Please select an employee and enter a valid amount." });
+      return;
+    }
+
+    try {
+      await handleUpdateVoucher(editingVoucherId, {
+        employeeId: voucherEmployee,
+        employeeName: employees.find(e => e.id === voucherEmployee)?.name || 'Unknown',
+        month: `${voucherMonth} ${voucherYear}`,
+        date: voucherDate,
+        amount: voucherAmount,
+        paymentMethod: voucherMethod,
+        remarks: voucherRemarks
+      });
+      
+      toast({ title: "Success", description: "Voucher updated successfully." });
+      setEditingVoucherId(null);
+      setVoucherEmployee("");
+      setVoucherAmount("");
+      setVoucherRemarks("");
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message || "Failed to update voucher." });
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingVoucherId(null);
+    setVoucherEmployee("");
+    setVoucherAmount("");
+    setVoucherRemarks("");
+  };
+
+  const handleEditVoucher = (v: any) => {
+    setEditingVoucherId(v.id);
+    setVoucherEmployee(v.employeeId);
+    setVoucherDate(v.date || new Date().toISOString().split('T')[0]);
+    setVoucherAmount(v.amount);
+    setVoucherMethod(v.paymentMethod);
+    setVoucherRemarks(v.remarks || "");
+    const [m, y] = v.month.split(' ');
+    setVoucherMonth(m || MONTHS[new Date().getMonth()]);
+    setVoucherYear(y || activeFinancialYear.split('-')[0]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const onPrintVoucher = (voucher: any) => {
@@ -222,7 +270,7 @@ export function SalaryVouchers() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <Card className="col-span-1 lg:col-span-1 h-full flex flex-col">
           <CardHeader>
-            <CardTitle className="text-sm">Generate Voucher</CardTitle>
+            <CardTitle className="text-sm">{editingVoucherId ? 'Edit Voucher' : 'Generate Voucher'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
@@ -326,13 +374,29 @@ export function SalaryVouchers() {
                 onChange={e => setVoucherRemarks(e.target.value)}
               />
             </div>
-            <Button 
-              className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
-              onClick={onCreateVoucher}
-            >
-              <ReceiptText className="w-4 h-4 mr-2" />
-              Generate Voucher
-            </Button>
+            
+            {editingVoucherId ? (
+              <div className="flex gap-3 mt-4">
+                <Button 
+                  className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
+                  onClick={onUpdateVoucher}
+                >
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Update Voucher
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={cancelEdit}>
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                className="w-full mt-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all"
+                onClick={onCreateVoucher}
+              >
+                <ReceiptText className="w-4 h-4 mr-2" />
+                Generate Voucher
+              </Button>
+            )}
           </CardContent>
         </Card>
 
@@ -399,7 +463,7 @@ export function SalaryVouchers() {
                     <p className="text-sm">No vouchers generated for this period.</p>
                   </div>
                 ) : (
-                  <div className="rounded-md border border-border/50 max-h-[350px] overflow-auto">
+                  <div className="rounded-md border border-border/50">
                     <Table>
                       <TableHeader className="bg-muted/50 sticky top-0">
                         <TableRow>
@@ -435,6 +499,9 @@ export function SalaryVouchers() {
                               <div className="flex justify-end gap-2">
                                 <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => onPrintVoucher(v)}>
                                   <Printer className="w-3.5 h-3.5 text-blue-500" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => handleEditVoucher(v)}>
+                                  <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-red-500/10" onClick={() => handleDeleteVoucher(v.id)}>
                                   <Trash2 className="w-3.5 h-3.5 text-red-500" />
