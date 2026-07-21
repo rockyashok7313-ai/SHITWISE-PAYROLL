@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ReceiptText, Trash2, Printer, Search } from "lucide-react";
+import { ReceiptText, Trash2, Printer, Search, Download } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -34,8 +34,12 @@ export function SalaryVouchers() {
   const [voucherRemarks, setVoucherRemarks] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [historyMonth, setHistoryMonth] = useState<string>(MONTHS[new Date().getMonth()]);
+  const [historyYear, setHistoryYear] = useState<string>(activeFinancialYear.split('-')[0]);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+
   const safeVouchers = vouchers || [];
-  const periodVouchers = safeVouchers.filter((v: any) => v.month === `${voucherMonth} ${voucherYear}`);
+  const periodVouchers = safeVouchers.filter((v: any) => v.month === `${historyMonth} ${historyYear}`);
   const bankTotal = periodVouchers.filter((v: any) => v.paymentMethod === 'Bank').reduce((sum, v) => sum + Number(v.amount), 0);
   const cashTotal = periodVouchers.filter((v: any) => v.paymentMethod === 'Cash').reduce((sum, v) => sum + Number(v.amount), 0);
 
@@ -116,6 +120,83 @@ export function SalaryVouchers() {
   const onPrintVoucher = (voucher: any) => {
     // In a real app, this would generate a PDF or open a print dialog
     toast({ title: "Print Voucher", description: `Printing voucher for ${voucher.employeeName}...` });
+  };
+
+  const handleDownloadPDF = async () => {
+    setIsExportingPDF(true);
+    try {
+      const { jsPDF } = await import("jspdf");
+      
+      if (!periodVouchers || periodVouchers.length === 0) {
+        toast({ variant: "destructive", title: "No Data", description: "No vouchers found for the selected period." });
+        return;
+      }
+      
+      const pdf = new jsPDF("p", "mm", "a4");
+      
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(16);
+      pdf.text(`Voucher Report - ${historyMonth} ${historyYear}`, 15, 20);
+      
+      pdf.setFontSize(10);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(`Generated on: ${new Date().toLocaleString()}`, 15, 28);
+      
+      // Summary Box
+      pdf.setFillColor(243, 244, 246);
+      pdf.rect(15, 35, 180, 20, "F");
+      
+      pdf.setFont("helvetica", "bold");
+      pdf.text(`Total Bank Paid: Rs. ${bankTotal.toLocaleString('en-IN')}`, 20, 43);
+      pdf.text(`Total Cash Paid: Rs. ${cashTotal.toLocaleString('en-IN')}`, 100, 43);
+      pdf.text(`Total Payout: Rs. ${(bankTotal + cashTotal).toLocaleString('en-IN')}`, 20, 50);
+      
+      // Table Header
+      let y = 65;
+      pdf.setFillColor(31, 41, 55);
+      pdf.rect(15, y, 180, 8, "F");
+      
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(9);
+      pdf.text("Date", 18, y + 5.5);
+      pdf.text("Employee Name", 45, y + 5.5);
+      pdf.text("Method", 130, y + 5.5);
+      pdf.text("Amount (Rs)", 185, y + 5.5, { align: "right" });
+      
+      // Table Rows
+      pdf.setTextColor(0, 0, 0);
+      pdf.setFont("helvetica", "normal");
+      
+      y += 10;
+      
+      periodVouchers.forEach((v: any, index: number) => {
+        if (y > 270) {
+          pdf.addPage();
+          y = 20;
+        }
+        
+        pdf.setFillColor(index % 2 === 0 ? 255 : 249, index % 2 === 0 ? 255 : 250, index % 2 === 0 ? 255 : 251);
+        pdf.rect(15, y - 2, 180, 8, "F");
+        
+        const dateStr = v.date ? new Date(v.date).toLocaleDateString() : 'N/A';
+        pdf.text(dateStr, 18, y + 3);
+        pdf.text(v.employeeName.substring(0, 35), 45, y + 3);
+        pdf.text(v.paymentMethod, 130, y + 3);
+        pdf.text(Number(v.amount).toLocaleString('en-IN'), 185, y + 3, { align: "right" });
+        
+        y += 8;
+      });
+      
+      pdf.save(`Voucher_Report_${historyMonth}_${historyYear}.pdf`);
+      
+      toast({ title: "Success", description: "PDF report downloaded successfully." });
+    } catch (error) {
+      console.error(error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to generate PDF." });
+    } finally {
+      setIsExportingPDF(false);
+    }
   };
 
   return (
@@ -251,7 +332,7 @@ export function SalaryVouchers() {
           <div className="col-span-1 flex flex-col gap-6">
             <Card className="bg-emerald-950/20 border-emerald-900/30 flex-1 flex flex-col justify-center min-h-[140px]">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-emerald-500">Bank Paid ({voucherMonth} {voucherYear})</CardTitle>
+                <CardTitle className="text-sm font-medium text-emerald-500">Bank Paid ({historyMonth} {historyYear})</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono">₹{bankTotal.toLocaleString('en-IN')}</div>
@@ -259,7 +340,7 @@ export function SalaryVouchers() {
             </Card>
             <Card className="bg-amber-950/20 border-amber-900/30 flex-1 flex flex-col justify-center min-h-[140px]">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-amber-500">Cash Paid ({voucherMonth} {voucherYear})</CardTitle>
+                <CardTitle className="text-sm font-medium text-amber-500">Cash Paid ({historyMonth} {historyYear})</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono">₹{cashTotal.toLocaleString('en-IN')}</div>
@@ -269,14 +350,41 @@ export function SalaryVouchers() {
           
           <div className="col-span-1 lg:col-span-2">
             <Card className="h-full">
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm">Voucher History ({voucherMonth} {voucherYear})</CardTitle>
-                <Button variant="outline" size="sm" onClick={() => window.print()} className="h-8">
-                  <Printer className="w-3.5 h-3.5 mr-2" />
-                  Print List
-                </Button>
+              <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 gap-4 border-b border-border/50">
+                <div className="flex items-center gap-3">
+                  <Select value={historyMonth} onValueChange={setHistoryMonth}>
+                    <SelectTrigger className="w-[120px] h-8 text-xs">
+                      <SelectValue placeholder="Month" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTHS.map(m => (
+                        <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={historyYear} onValueChange={setHistoryYear}>
+                    <SelectTrigger className="w-[90px] h-8 text-xs">
+                      <SelectValue placeholder="Year" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {YEARS.map(y => (
+                        <SelectItem key={y} value={y} className="text-xs">{y}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => window.print()} className="h-8">
+                    <Printer className="w-3.5 h-3.5 mr-2" />
+                    Print
+                  </Button>
+                  <Button variant="default" size="sm" onClick={handleDownloadPDF} disabled={isExportingPDF} className="h-8 shadow-sm">
+                    <Download className="w-3.5 h-3.5 mr-2" />
+                    {isExportingPDF ? "Exporting..." : "Export PDF"}
+                  </Button>
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 {periodVouchers.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground flex flex-col items-center justify-center">
                     <ReceiptText className="w-8 h-8 mb-3 opacity-20" />
