@@ -112,29 +112,8 @@ export function AttendanceLogger() {
     let loadedEntries = attendance || [];
 
     if (loadedEntries.length === 0) {
-      // Load current employee list from props
-      const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
-
-      if (currentEmployees.length > 0) {
-        const monthIndex = MONTHS.indexOf(selectedMonth);
-        const monthStr = String(monthIndex !== -1 ? monthIndex + 1 : 1).padStart(2, '0');
-        const dayStr = String(new Date().getDate()).padStart(2, '0');
-        const initialDate = `${selectedYear}-${monthStr}-${dayStr}`;
-
-        loadedEntries = currentEmployees.map(emp => ({
-          ...emp,
-          date: initialDate,
-          shift: emp.shift as '9-hour' | '12-hour',
-          clockIn: "",
-          clockOut: "",
-          hours: emp.shift === '12-hour' ? 12 : 9,
-          incentive: 0,
-          weeklyAdvance: 0,
-          loan: 0,
-          isModified: false,
-          employeeRefId: emp.id
-        }));
-      }
+      // User requested NOT to auto-populate everyone
+      loadedEntries = [];
     } else {
       // Sync loaded entries' dates with current selectedYear/selectedMonth
       const monthIndex = MONTHS.indexOf(selectedMonth);
