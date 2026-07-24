@@ -38,6 +38,7 @@ import {
   yearForMonth,
   yearOptions
 } from "@/lib/payroll";
+import { resolveBonusYear, sumIncludedMonths, isHandEdited } from "@/lib/bonus-migration";
 
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
@@ -88,11 +89,31 @@ const bonusStorageKey = (financialYear: string, year: string) =>
 const legacyBonusStorageKey = (financialYear: string, year: string) =>
   `bonuses_${financialYear}_${year}`;
 
+/** Reads a stored ledger, tolerating absent or corrupt JSON. */
+function readBonusLedger(key: string): any[] | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch (err) {
+    console.error(`Could not read bonus ledger ${key}`, err);
+    return null;
+  }
+}
+
+/* resolveBonusYear, sumIncludedMonths and isHandEdited live in
+ * @/lib/bonus-migration so the v1 classification -- which decides whether a
+ * user's typed figure survives -- is covered by tests. */
+
 interface PayrollReportsProps {
   // Now using AppContext
 }
 
-interface MonthlySalaries {
+/* A type alias rather than an interface: interfaces are open to declaration
+ * merging, so TypeScript will not treat one as assignable to
+ * Record<string, number>, which sumIncludedMonths takes. */
+type MonthlySalaries = {
   January: number;
   February: number;
   March: number;
@@ -105,7 +126,7 @@ interface MonthlySalaries {
   October: number;
   November: number;
   December: number;
-}
+};
 
 interface BonusEntry {
   id: string;
@@ -191,11 +212,10 @@ export function PayrollReports() {
   }, [activeFinancialYear]);
 
   const initializeBonusEntries = (year: string, globalPct: number) => {
-    const saved = localStorage.getItem(bonusStorageKey(activeFinancialYear, year));
+    const saved = readBonusLedger(bonusStorageKey(activeFinancialYear, year));
     if (saved) {
-      const parsed = JSON.parse(saved);
       // Migration to ensure includedMonths exists
-      const migrated = parsed.map((entry: any) => ({
+      const migrated = saved.map((entry: any) => ({
         ...entry,
         includedMonths: entry.includedMonths || MONTHS
       }));
@@ -209,17 +229,14 @@ export function PayrollReports() {
 
     /* A ledger saved before the shared-calculation fix was built on a gross of
      * `days x rate` with no shift multiplier, i.e. 1/9th or 1/12th of real
-     * earnings. Those numbers must not be restored. The old key is left in
-     * place rather than deleted so the figures stay recoverable, but we
-     * recompute from attendance and tell the user their overrides are gone. */
-    const legacy = localStorage.getItem(legacyBonusStorageKey(activeFinancialYear, year));
-    if (legacy) {
-      toast({
-        variant: "destructive",
-        title: "Previous bonus ledger discarded",
-        description: `The saved ${year} ledger was calculated before the payroll fix and understated earnings. It has been recomputed from attendance -- any manual salary, percentage or round-off edits need re-entering.`,
-      });
-    }
+     * earnings. The computed cells in it are wrong and must be replaced, but
+     * the hand-entered ones are real work and are carried forward -- see
+     * legacyMonthlySalary for how the two are told apart. The old key is left
+     * in place rather than deleted so the previous figures stay recoverable. */
+    const legacyEntries = readBonusLedger(legacyBonusStorageKey(activeFinancialYear, year));
+    const legacyById = new Map<string, any>((legacyEntries || []).map((e: any) => [e.id, e]));
+    let preservedCells = 0;
+    let preservedPercentages = 0;
 
     const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
 
@@ -231,17 +248,10 @@ export function PayrollReports() {
 
       const dailyRate = emp.rate * shiftHoursFor(emp.shift);
       const defaultMonthlySalary = dailyRate * 26;
+      const prior = legacyById.get(emp.id);
 
       MONTHS.forEach(mName => {
-        // Resolve which calendar year this month falls in when `year` is a
-        // financial year like "2026-2027".
-        let expectedYear = year;
-        if (year.includes('-')) {
-          const fyParts = year.split('-');
-          expectedYear = [
-            "January", "February", "March", "April", "May", "June", "July", "August", "September"
-          ].includes(mName) ? fyParts[1] : fyParts[0];
-        }
+        const expectedYear = resolveBonusYear(mName, year);
 
         const empLogs = filterAttendanceForPeriod(
           (attendance || []) as AttendanceEntry[],
@@ -256,24 +266,55 @@ export function PayrollReports() {
         const mSalary = empLogs.length > 0
           ? calculatePeriodTotals(empLogs, { rate: emp.rate, shift: emp.shift }).net
           : 0;
+        const corrected = mSalary > 0 ? mSalary : defaultMonthlySalary;
 
-        monthlySalaries[mName as keyof MonthlySalaries] = mSalary > 0 ? mSalary : defaultMonthlySalary;
+        // Keep a cell the user typed; replace one v1 merely computed.
+        const stored = prior?.monthlySalaries?.[mName];
+        if (isHandEdited(stored, emp.id, (attendance || []) as any[], mName, expectedYear, defaultMonthlySalary)) {
+          monthlySalaries[mName as keyof MonthlySalaries] = stored;
+          preservedCells++;
+          return;
+        }
+
+        monthlySalaries[mName as keyof MonthlySalaries] = corrected;
       });
 
-      const yearlySalary = Object.values(monthlySalaries).reduce((sum, sal) => sum + sal, 0);
-      const bonusAmount = Math.round((yearlySalary * globalPct) / 100);
+      // Month inclusion and percentage are pure user intent -- always carried.
+      const includedMonths: string[] = prior?.includedMonths || MONTHS;
+      const percentage = typeof prior?.percentage === 'number' ? prior.percentage : globalPct;
+      if (prior && percentage !== globalPct) preservedPercentages++;
+
+      const yearlySalary = sumIncludedMonths(monthlySalaries, includedMonths);
+
+      /* bonusAmount is recomputed, never carried. A stored round-off was a
+       * rounding of an understated yearly figure, so carrying it forward would
+       * reintroduce the very number this migration exists to correct. */
+      const bonusAmount = Math.round((yearlySalary * percentage) / 100);
 
       return {
         id: emp.id,
         name: emp.name,
         role: emp.role,
         monthlySalaries,
-        includedMonths: MONTHS,
+        includedMonths,
         yearlySalary,
-        percentage: globalPct,
+        percentage,
         bonusAmount
       };
     });
+
+    if (legacyEntries) {
+      const cells = `${preservedCells} hand-edited salary ${preservedCells === 1 ? 'cell' : 'cells'}`;
+      const pcts = preservedPercentages === 1 ? '1 custom percentage' : `${preservedPercentages} custom percentages`;
+      toast({
+        title: "Previous bonus ledger migrated",
+        description: `Carried forward ${cells}, ${pcts} and your month selections. Computed figures were recalculated -- the previous ledger understated earnings -- and round-off amounts were rebuilt from the corrected totals. Review before saving.`,
+      });
+
+      if (legacyEntries.length > 0 && typeof legacyEntries[0].percentage === 'number') {
+        setBonusPercentage(legacyEntries[0].percentage);
+      }
+    }
 
     setBonusEntries(computed);
     setActiveEditEmployeeIndex(0);
