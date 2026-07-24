@@ -14,10 +14,10 @@
  *                                                                 so bonuses were computed
  *                                                                 on 1/9th or 1/12th of
  *                                                                 real earnings]
- *   4. lib/payroll-calculator.ts  gross = hours x rate           [accepts shiftType and
- *                                                                 ignores it; dead code,
- *                                                                 only its own test
- *                                                                 imports it]
+ *   4. lib/payroll-calculator.ts  gross = hours x rate           [accepted shiftType and
+ *                                                                 ignored it; was dead code
+ *                                                                 with tests asserting the
+ *                                                                 wrong result -- DELETED]
  *
  * (1) and (2) agreed on the formula but disagreed on the fallbacks -- see
  * `calculateEntryBreakdown` below. This module resolves all four.
