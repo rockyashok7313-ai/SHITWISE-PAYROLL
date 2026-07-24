@@ -29,6 +29,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAppContext } from "@/components/providers/app-provider";
 import { useRole } from "@/hooks/use-role";
+import {
+  MONTHS,
+  AttendanceEntry,
+  calculatePeriodTotals,
+  filterAttendanceForPeriod,
+  shiftHoursFor
+} from "@/lib/payroll";
 
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
@@ -45,10 +52,8 @@ const DEFAULT_TREND_DATA = [
   { month: "Dec", cost: 180000 },
 ];
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June", 
-  "July", "August", "September", "October", "November", "December"
-];
+/* MONTHS now comes from @/lib/payroll so the month <-> index mapping used for
+ * attendance date matching has exactly one definition. */
 
 const FY_MONTHS = [
   "October", "November", "December", 
@@ -189,40 +194,34 @@ export function PayrollReports() {
         July: 0, August: 0, September: 0, October: 0, November: 0, December: 0
       };
 
-      const shiftHours = emp.shift === '12-hour' ? 12 : 9;
-      const dailyRate = emp.rate * shiftHours;
+      const dailyRate = emp.rate * shiftHoursFor(emp.shift);
       const defaultMonthlySalary = dailyRate * 26;
 
       MONTHS.forEach(mName => {
-        let mSalary = 0;
-        if (attendance && attendance.length > 0) {
-          const empLogs = attendance.filter(entry => {
-            if (entry.id !== emp.id) return false;
-            const parts = entry.date.split('-');
-            if (parts.length < 3) return false;
-            const entryYear = parts[0];
-            const entryMonthIndex = parseInt(parts[1]) - 1;
-            const entryMonthName = MONTHS[entryMonthIndex];
-            
-            let expectedYear = year;
-            if (year.includes('-')) {
-              const fyParts = year.split('-');
-              expectedYear = [
-                "January", "February", "March", "April", "May", "June", "July", "August", "September"
-              ].includes(mName) ? fyParts[1] : fyParts[0];
-            }
-            
-            return entryMonthName === mName && entryYear === expectedYear;
-          });
-
-          if (empLogs.length > 0) {
-            mSalary = empLogs.reduce((sum, log) => {
-              const gross = log.hours * log.rate;
-              const net = gross + (log.incentive || 0) - (log.weeklyAdvance || 0) - (log.loan || 0);
-              return sum + net;
-            }, 0);
-          }
+        // Resolve which calendar year this month falls in when `year` is a
+        // financial year like "2026-2027".
+        let expectedYear = year;
+        if (year.includes('-')) {
+          const fyParts = year.split('-');
+          expectedYear = [
+            "January", "February", "March", "April", "May", "June", "July", "August", "September"
+          ].includes(mName) ? fyParts[1] : fyParts[0];
         }
+
+        const empLogs = filterAttendanceForPeriod(
+          (attendance || []) as AttendanceEntry[],
+          emp.id,
+          mName,
+          expectedYear
+        );
+
+        /* This used to compute `gross = log.hours * log.rate`, omitting the
+         * shift-hours multiplier that every other screen applies. Bonuses were
+         * therefore calculated on 1/9th (or 1/12th) of real earnings. Now shared. */
+        const mSalary = empLogs.length > 0
+          ? calculatePeriodTotals(empLogs, { rate: emp.rate, shift: emp.shift }).net
+          : 0;
+
         monthlySalaries[mName as keyof MonthlySalaries] = mSalary > 0 ? mSalary : defaultMonthlySalary;
       });
 
@@ -706,54 +705,24 @@ Please contact HR if you have any questions.`;
     setTimeout(() => {
       const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
       const data = roster.map(emp => {
-        let daysWorked = 0;
-        let gross = 0;
-        let incentive = 0;
-        let deductions = 0;
+        const empLogs = filterAttendanceForPeriod(
+          (attendance || []) as AttendanceEntry[],
+          emp.id,
+          selectedMonth,
+          selectedYear
+        );
 
-        let net = 0;
-
-        if (attendance && attendance.length > 0) {
-          const empLogs = attendance.filter(entry => {
-            const isEmpMatch = (entry.employeeRefId || entry.id?.split('-')[0]) === emp.id || entry.id === emp.id;
-            if (!isEmpMatch) return false;
-            
-            if (entry.date) {
-               const parts = entry.date.split('-');
-               if (parts.length >= 3) {
-                 const logYear = parts[0];
-                 const logMonth = MONTHS[parseInt(parts[1]) - 1];
-                 return logYear === selectedYear && logMonth === selectedMonth;
-               }
-            }
-            return false;
-          });
-
-          daysWorked = 0;
-          empLogs.forEach(log => {
-             // log.hours contains the Total Days for the month (as logged by Attendance Logger)
-             const days = log.hours || 0;
-             const shiftHours = (log.shift || emp.shift) === '12-hour' ? 12 : 9;
-             const hourlyRate = log.rate || emp.rate || 0;
-             const dailyRate = hourlyRate * shiftHours;
-             
-             daysWorked += days;
-             gross += (days * dailyRate);
-             incentive += (log.incentive || 0);
-             deductions += (log.weeklyAdvance || 0) + (log.loan || 0);
-
-             const rawNet = (days * dailyRate) + (log.incentive || 0) - (log.weeklyAdvance || 0) - (log.loan || 0);
-             net += Math.round(rawNet);
-          });
-        }
+        const totals = calculatePeriodTotals(empLogs, { rate: emp.rate, shift: emp.shift });
 
         return {
           ...emp,
-          daysWorked,
-          gross,
-          incentive,
-          deductions,
-          net: net > 0 ? net : 0
+          daysWorked: totals.days,
+          gross: totals.gross,
+          incentive: totals.incentive,
+          deductions: totals.deductions,
+          // Clamped for display, as before. `totals.net` is the unclamped figure
+          // if you ever need to show a carried-forward negative balance.
+          net: Math.max(0, totals.net)
         };
       });
 
