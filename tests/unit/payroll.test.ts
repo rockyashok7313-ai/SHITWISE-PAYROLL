@@ -11,7 +11,8 @@ import {
   entryPeriod,
   isInPeriod,
   filterAttendanceForPeriod,
-  yearForMonth
+  yearForMonth,
+  yearOptions
 } from '../../src/lib/payroll';
 
 /**
@@ -335,6 +336,30 @@ describe('yearForMonth', () => {
     const thisYear = String(new Date().getFullYear());
     expect(yearForMonth('April', '')).toBe(thisYear);
     expect(yearForMonth('April', 'not-a-year')).toBe(thisYear);
+  });
+});
+
+describe('yearOptions', () => {
+  it('spans three years back to two years forward from the financial year start', () => {
+    expect(yearOptions('2026-2027')).toEqual(['2023', '2024', '2025', '2026', '2027', '2028']);
+  });
+
+  it('always includes the financial year start and the year after it', () => {
+    const years = yearOptions('2026-2027');
+    expect(years).toContain('2026');
+    expect(years).toContain('2027');
+  });
+
+  it('centres on the current year when the financial year is unusable', () => {
+    const now = new Date().getFullYear();
+    expect(yearOptions('')).toContain(String(now));
+    expect(yearOptions('not-a-year')).toContain(String(now));
+  });
+
+  it('moves with the financial year rather than being frozen', () => {
+    // The hardcoded ["2023".."2027"] lists would not have offered 2030.
+    expect(yearOptions('2030-2031')).toContain('2030');
+    expect(yearOptions('2030-2031')).not.toContain('2023');
   });
 });
 

@@ -257,3 +257,15 @@ export function yearForMonth(monthName: string, financialYear: string): string {
   // April (index 3) onwards belongs to the starting calendar year.
   return monthIndex >= 3 ? `${start}` : `${end}`;
 }
+
+/**
+ * Calendar-year options for a period picker, generated around the active
+ * financial year. Replaces the hardcoded ["2023".."2027"] lists, which would
+ * have silently stopped offering the current year in 2028.
+ */
+export function yearOptions(financialYear: string): string[] {
+  const start = Number((financialYear || "").split("-")[0]) || new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = start - 3; y <= start + 2; y++) years.push(`${y}`);
+  return years;
+}

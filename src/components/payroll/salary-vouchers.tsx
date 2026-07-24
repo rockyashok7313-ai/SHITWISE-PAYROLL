@@ -17,7 +17,8 @@ import {
   AttendanceEntry,
   calculateNetPay,
   filterAttendanceForPeriod,
-  yearForMonth
+  yearForMonth,
+  yearOptions
 } from "@/lib/payroll";
 
 /* ------------------------------------------------------------------ */
@@ -39,14 +40,6 @@ function formatDisplayDate(iso?: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   if (!y || !m || !d) return 'N/A';
   return new Date(y, m - 1, d).toLocaleDateString();
-}
-
-/** Year options generated around the active financial year instead of hardcoded. */
-function yearOptions(financialYear: string): string[] {
-  const start = Number((financialYear || '').split('-')[0]) || new Date().getFullYear();
-  const years: string[] = [];
-  for (let y = start - 3; y <= start + 2; y++) years.push(`${y}`);
-  return years;
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,7 +34,9 @@ import {
   AttendanceEntry,
   calculatePeriodTotals,
   filterAttendanceForPeriod,
-  shiftHoursFor
+  shiftHoursFor,
+  yearForMonth,
+  yearOptions
 } from "@/lib/payroll";
 
 const DEFAULT_TREND_DATA = [
@@ -71,8 +73,20 @@ const getMonthYearLabel = (month: string, fy: string) => {
   return `${month.toUpperCase()} ${year}`;
 };
 
-const YEARS = ["2023", "2024", "2025", "2026", "2027"];
+/* YEARS is now generated per financial year via yearOptions() -- the hardcoded
+ * ["2023".."2027"] list would have stopped offering the current year in 2028. */
 const FY_YEARS = ["2022-2023", "2023-2024", "2024-2025", "2025-2026", "2026-2027", "2027-2028"];
+
+/* Bonus ledgers are versioned. v1 keys hold figures computed with the pre-fix
+ * formula (gross missing the shift-hours multiplier); they are never read back,
+ * only detected, so a stale ledger cannot silently reappear as if correct. */
+const BONUS_STORAGE_VERSION = "v2";
+
+const bonusStorageKey = (financialYear: string, year: string) =>
+  `bonuses_${BONUS_STORAGE_VERSION}_${financialYear}_${year}`;
+
+const legacyBonusStorageKey = (financialYear: string, year: string) =>
+  `bonuses_${financialYear}_${year}`;
 
 interface PayrollReportsProps {
   // Now using AppContext
@@ -110,9 +124,13 @@ export function PayrollReports() {
   const activeFinancialYear = config.financialYear;
   const { toast } = useToast();
   const reportRef = useRef<HTMLDivElement>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>("May");
-  const [selectedYear, setSelectedYear] = useState<string>(activeFinancialYear.split('-')[0]);
+  const currentMonth = MONTHS[new Date().getMonth()];
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
+  // Not `split('-')[0]`: under FY 2026-2027 a January report belongs to 2027.
+  const [selectedYear, setSelectedYear] = useState<string>(() => yearForMonth(currentMonth, activeFinancialYear));
   const [trendData, setTrendData] = useState(DEFAULT_TREND_DATA);
+
+  const years = useMemo(() => yearOptions(activeFinancialYear), [activeFinancialYear]);
   
   useEffect(() => {
     const saved = localStorage.getItem(`monthly_expenditure_${activeFinancialYear}`);
@@ -165,12 +183,15 @@ export function PayrollReports() {
   };
 
   useEffect(() => {
-    setSelectedYear(activeFinancialYear.split('-')[0]);
+    setSelectedYear(yearForMonth(selectedMonth, activeFinancialYear));
     setBonusRefYear(activeFinancialYear);
+    // selectedMonth is read, not tracked: this resyncs on a financial-year
+    // change, and must not fight the user picking a month by hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFinancialYear]);
 
   const initializeBonusEntries = (year: string, globalPct: number) => {
-    const saved = localStorage.getItem(`bonuses_${activeFinancialYear}_${year}`);
+    const saved = localStorage.getItem(bonusStorageKey(activeFinancialYear, year));
     if (saved) {
       const parsed = JSON.parse(saved);
       // Migration to ensure includedMonths exists
@@ -184,6 +205,20 @@ export function PayrollReports() {
       }
       setActiveEditEmployeeIndex(0);
       return;
+    }
+
+    /* A ledger saved before the shared-calculation fix was built on a gross of
+     * `days x rate` with no shift multiplier, i.e. 1/9th or 1/12th of real
+     * earnings. Those numbers must not be restored. The old key is left in
+     * place rather than deleted so the figures stay recoverable, but we
+     * recompute from attendance and tell the user their overrides are gone. */
+    const legacy = localStorage.getItem(legacyBonusStorageKey(activeFinancialYear, year));
+    if (legacy) {
+      toast({
+        variant: "destructive",
+        title: "Previous bonus ledger discarded",
+        description: `The saved ${year} ledger was calculated before the payroll fix and understated earnings. It has been recomputed from attendance -- any manual salary, percentage or round-off edits need re-entering.`,
+      });
     }
 
     const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
@@ -313,7 +348,7 @@ export function PayrollReports() {
   };
 
   const handleSaveBonuses = () => {
-    localStorage.setItem(`bonuses_${activeFinancialYear}_${bonusRefYear}`, JSON.stringify(bonusEntries));
+    localStorage.setItem(bonusStorageKey(activeFinancialYear, bonusRefYear), JSON.stringify(bonusEntries));
     toast({
       title: "Bonus Ledger Saved",
       description: `Persisted yearly bonus calculations for year ${bonusRefYear} under active FY.`,
@@ -1055,7 +1090,7 @@ Please contact HR if you have any questions.`;
                   <SelectValue placeholder="Year" />
                 </SelectTrigger>
                 <SelectContent>
-                  {YEARS.map(y => (
+                  {years.map(y => (
                     <SelectItem key={y} value={y}>{y}</SelectItem>
                   ))}
                 </SelectContent>
