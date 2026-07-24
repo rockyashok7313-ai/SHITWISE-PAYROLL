@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -29,6 +29,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAppContext } from "@/components/providers/app-provider";
 import { useRole } from "@/hooks/use-role";
+import {
+  MONTHS,
+  AttendanceEntry,
+  calculatePeriodTotals,
+  filterAttendanceForPeriod,
+  shiftHoursFor,
+  yearForMonth,
+  yearOptions
+} from "@/lib/payroll";
 
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
@@ -45,10 +54,8 @@ const DEFAULT_TREND_DATA = [
   { month: "Dec", cost: 180000 },
 ];
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June", 
-  "July", "August", "September", "October", "November", "December"
-];
+/* MONTHS now comes from @/lib/payroll so the month <-> index mapping used for
+ * attendance date matching has exactly one definition. */
 
 const FY_MONTHS = [
   "October", "November", "December", 
@@ -66,8 +73,20 @@ const getMonthYearLabel = (month: string, fy: string) => {
   return `${month.toUpperCase()} ${year}`;
 };
 
-const YEARS = ["2023", "2024", "2025", "2026", "2027"];
+/* YEARS is now generated per financial year via yearOptions() -- the hardcoded
+ * ["2023".."2027"] list would have stopped offering the current year in 2028. */
 const FY_YEARS = ["2022-2023", "2023-2024", "2024-2025", "2025-2026", "2026-2027", "2027-2028"];
+
+/* Bonus ledgers are versioned. v1 keys hold figures computed with the pre-fix
+ * formula (gross missing the shift-hours multiplier); they are never read back,
+ * only detected, so a stale ledger cannot silently reappear as if correct. */
+const BONUS_STORAGE_VERSION = "v2";
+
+const bonusStorageKey = (financialYear: string, year: string) =>
+  `bonuses_${BONUS_STORAGE_VERSION}_${financialYear}_${year}`;
+
+const legacyBonusStorageKey = (financialYear: string, year: string) =>
+  `bonuses_${financialYear}_${year}`;
 
 interface PayrollReportsProps {
   // Now using AppContext
@@ -105,9 +124,13 @@ export function PayrollReports() {
   const activeFinancialYear = config.financialYear;
   const { toast } = useToast();
   const reportRef = useRef<HTMLDivElement>(null);
-  const [selectedMonth, setSelectedMonth] = useState<string>("May");
-  const [selectedYear, setSelectedYear] = useState<string>(activeFinancialYear.split('-')[0]);
+  const currentMonth = MONTHS[new Date().getMonth()];
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonth);
+  // Not `split('-')[0]`: under FY 2026-2027 a January report belongs to 2027.
+  const [selectedYear, setSelectedYear] = useState<string>(() => yearForMonth(currentMonth, activeFinancialYear));
   const [trendData, setTrendData] = useState(DEFAULT_TREND_DATA);
+
+  const years = useMemo(() => yearOptions(activeFinancialYear), [activeFinancialYear]);
   
   useEffect(() => {
     const saved = localStorage.getItem(`monthly_expenditure_${activeFinancialYear}`);
@@ -160,12 +183,15 @@ export function PayrollReports() {
   };
 
   useEffect(() => {
-    setSelectedYear(activeFinancialYear.split('-')[0]);
+    setSelectedYear(yearForMonth(selectedMonth, activeFinancialYear));
     setBonusRefYear(activeFinancialYear);
+    // selectedMonth is read, not tracked: this resyncs on a financial-year
+    // change, and must not fight the user picking a month by hand.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFinancialYear]);
 
   const initializeBonusEntries = (year: string, globalPct: number) => {
-    const saved = localStorage.getItem(`bonuses_${activeFinancialYear}_${year}`);
+    const saved = localStorage.getItem(bonusStorageKey(activeFinancialYear, year));
     if (saved) {
       const parsed = JSON.parse(saved);
       // Migration to ensure includedMonths exists
@@ -181,6 +207,20 @@ export function PayrollReports() {
       return;
     }
 
+    /* A ledger saved before the shared-calculation fix was built on a gross of
+     * `days x rate` with no shift multiplier, i.e. 1/9th or 1/12th of real
+     * earnings. Those numbers must not be restored. The old key is left in
+     * place rather than deleted so the figures stay recoverable, but we
+     * recompute from attendance and tell the user their overrides are gone. */
+    const legacy = localStorage.getItem(legacyBonusStorageKey(activeFinancialYear, year));
+    if (legacy) {
+      toast({
+        variant: "destructive",
+        title: "Previous bonus ledger discarded",
+        description: `The saved ${year} ledger was calculated before the payroll fix and understated earnings. It has been recomputed from attendance -- any manual salary, percentage or round-off edits need re-entering.`,
+      });
+    }
+
     const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
 
     const computed = roster.map(emp => {
@@ -189,40 +229,34 @@ export function PayrollReports() {
         July: 0, August: 0, September: 0, October: 0, November: 0, December: 0
       };
 
-      const shiftHours = emp.shift === '12-hour' ? 12 : 9;
-      const dailyRate = emp.rate * shiftHours;
+      const dailyRate = emp.rate * shiftHoursFor(emp.shift);
       const defaultMonthlySalary = dailyRate * 26;
 
       MONTHS.forEach(mName => {
-        let mSalary = 0;
-        if (attendance && attendance.length > 0) {
-          const empLogs = attendance.filter(entry => {
-            if (entry.id !== emp.id) return false;
-            const parts = entry.date.split('-');
-            if (parts.length < 3) return false;
-            const entryYear = parts[0];
-            const entryMonthIndex = parseInt(parts[1]) - 1;
-            const entryMonthName = MONTHS[entryMonthIndex];
-            
-            let expectedYear = year;
-            if (year.includes('-')) {
-              const fyParts = year.split('-');
-              expectedYear = [
-                "January", "February", "March", "April", "May", "June", "July", "August", "September"
-              ].includes(mName) ? fyParts[1] : fyParts[0];
-            }
-            
-            return entryMonthName === mName && entryYear === expectedYear;
-          });
-
-          if (empLogs.length > 0) {
-            mSalary = empLogs.reduce((sum, log) => {
-              const gross = log.hours * log.rate;
-              const net = gross + (log.incentive || 0) - (log.weeklyAdvance || 0) - (log.loan || 0);
-              return sum + net;
-            }, 0);
-          }
+        // Resolve which calendar year this month falls in when `year` is a
+        // financial year like "2026-2027".
+        let expectedYear = year;
+        if (year.includes('-')) {
+          const fyParts = year.split('-');
+          expectedYear = [
+            "January", "February", "March", "April", "May", "June", "July", "August", "September"
+          ].includes(mName) ? fyParts[1] : fyParts[0];
         }
+
+        const empLogs = filterAttendanceForPeriod(
+          (attendance || []) as AttendanceEntry[],
+          emp.id,
+          mName,
+          expectedYear
+        );
+
+        /* This used to compute `gross = log.hours * log.rate`, omitting the
+         * shift-hours multiplier that every other screen applies. Bonuses were
+         * therefore calculated on 1/9th (or 1/12th) of real earnings. Now shared. */
+        const mSalary = empLogs.length > 0
+          ? calculatePeriodTotals(empLogs, { rate: emp.rate, shift: emp.shift }).net
+          : 0;
+
         monthlySalaries[mName as keyof MonthlySalaries] = mSalary > 0 ? mSalary : defaultMonthlySalary;
       });
 
@@ -314,7 +348,7 @@ export function PayrollReports() {
   };
 
   const handleSaveBonuses = () => {
-    localStorage.setItem(`bonuses_${activeFinancialYear}_${bonusRefYear}`, JSON.stringify(bonusEntries));
+    localStorage.setItem(bonusStorageKey(activeFinancialYear, bonusRefYear), JSON.stringify(bonusEntries));
     toast({
       title: "Bonus Ledger Saved",
       description: `Persisted yearly bonus calculations for year ${bonusRefYear} under active FY.`,
@@ -706,54 +740,24 @@ Please contact HR if you have any questions.`;
     setTimeout(() => {
       const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
       const data = roster.map(emp => {
-        let daysWorked = 0;
-        let gross = 0;
-        let incentive = 0;
-        let deductions = 0;
+        const empLogs = filterAttendanceForPeriod(
+          (attendance || []) as AttendanceEntry[],
+          emp.id,
+          selectedMonth,
+          selectedYear
+        );
 
-        let net = 0;
-
-        if (attendance && attendance.length > 0) {
-          const empLogs = attendance.filter(entry => {
-            const isEmpMatch = (entry.employeeRefId || entry.id?.split('-')[0]) === emp.id || entry.id === emp.id;
-            if (!isEmpMatch) return false;
-            
-            if (entry.date) {
-               const parts = entry.date.split('-');
-               if (parts.length >= 3) {
-                 const logYear = parts[0];
-                 const logMonth = MONTHS[parseInt(parts[1]) - 1];
-                 return logYear === selectedYear && logMonth === selectedMonth;
-               }
-            }
-            return false;
-          });
-
-          daysWorked = 0;
-          empLogs.forEach(log => {
-             // log.hours contains the Total Days for the month (as logged by Attendance Logger)
-             const days = log.hours || 0;
-             const shiftHours = (log.shift || emp.shift) === '12-hour' ? 12 : 9;
-             const hourlyRate = log.rate || emp.rate || 0;
-             const dailyRate = hourlyRate * shiftHours;
-             
-             daysWorked += days;
-             gross += (days * dailyRate);
-             incentive += (log.incentive || 0);
-             deductions += (log.weeklyAdvance || 0) + (log.loan || 0);
-
-             const rawNet = (days * dailyRate) + (log.incentive || 0) - (log.weeklyAdvance || 0) - (log.loan || 0);
-             net += Math.round(rawNet);
-          });
-        }
+        const totals = calculatePeriodTotals(empLogs, { rate: emp.rate, shift: emp.shift });
 
         return {
           ...emp,
-          daysWorked,
-          gross,
-          incentive,
-          deductions,
-          net: net > 0 ? net : 0
+          daysWorked: totals.days,
+          gross: totals.gross,
+          incentive: totals.incentive,
+          deductions: totals.deductions,
+          // Clamped for display, as before. `totals.net` is the unclamped figure
+          // if you ever need to show a carried-forward negative balance.
+          net: Math.max(0, totals.net)
         };
       });
 
@@ -1086,7 +1090,7 @@ Please contact HR if you have any questions.`;
                   <SelectValue placeholder="Year" />
                 </SelectTrigger>
                 <SelectContent>
-                  {YEARS.map(y => (
+                  {years.map(y => (
                     <SelectItem key={y} value={y}>{y}</SelectItem>
                   ))}
                 </SelectContent>
