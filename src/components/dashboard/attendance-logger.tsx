@@ -1,7 +1,8 @@
 
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { paidEmployeeIds } from "@/lib/voucher-period";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +77,7 @@ const getDefaultPayrollPeriod = () => {
 import { useAppContext } from "@/components/providers/app-provider";
 
 export function AttendanceLogger() {
-  const { activeCompanyId, config, employees, attendance, handleAttendanceChange: onAttendanceChange } = useAppContext();
+  const { activeCompanyId, config, employees, attendance, vouchers, handleAttendanceChange: onAttendanceChange } = useAppContext();
   const activeFinancialYear = config.financialYear;
   const { toast } = useToast();
   const { isAdmin, isSupervisor, isAccountant } = useRole(activeCompanyId);
@@ -90,7 +91,6 @@ export function AttendanceLogger() {
   const [selectedYear, setSelectedYear] = useState<string>(() => getDefaultPayrollPeriod().year);
   const [draftMonth, setDraftMonth] = useState<string>(() => getDefaultPayrollPeriod().month);
   const [draftYear, setDraftYear] = useState<string>(() => getDefaultPayrollPeriod().year);
-  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, 'Paid' | 'Unpaid'>>({});
   const [newEntryDetails, setNewEntryDetails] = useState({
     fromDate: "",
     toDate: "",
@@ -155,24 +155,15 @@ export function AttendanceLogger() {
     setEntries(loadedEntries);
   }, [attendance, employees, selectedMonth, selectedYear]);
 
-  useEffect(() => {
-    const savedStatuses = localStorage.getItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`);
-    if (savedStatuses) {
-      setPaymentStatuses(JSON.parse(savedStatuses));
-    } else {
-      setPaymentStatuses({});
-    }
-  }, [activeFinancialYear, selectedMonth, selectedYear]);
-
-  const togglePaymentStatus = (empId: string) => {
-    setPaymentStatuses((prev: Record<string, 'Paid' | 'Unpaid'>) => {
-      const current = prev[empId] || 'Unpaid';
-      const next: 'Paid' | 'Unpaid' = current === 'Paid' ? 'Unpaid' : 'Paid';
-      const updated: Record<string, 'Paid' | 'Unpaid'> = { ...prev, [empId]: next };
-      localStorage.setItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`, JSON.stringify(updated));
-      return updated;
-    });
-  };
+  /* Paid status is derived from voucher existence, shared with the register via
+   * @/lib/voucher-period -- an employee is Paid for the period when a voucher
+   * exists for them in it. No side store, so this screen and the register can
+   * never disagree. */
+  const paidIds = useMemo(
+    () => paidEmployeeIds(vouchers, selectedMonth, selectedYear),
+    [vouchers, selectedMonth, selectedYear]
+  );
+  const isPaid = (empId: string) => paidIds.has(empId);
 
   // Save entries to parent state on change
   useEffect(() => {
@@ -255,7 +246,7 @@ export function AttendanceLogger() {
       if (statusFilter) {
          exportEntries = entries.filter(e => {
             const empId = e.employeeRefId || e.id.split('-')[0];
-            const status = paymentStatuses[empId] || 'Unpaid';
+            const status = isPaid(empId) ? 'Paid' : 'Unpaid';
             return status === statusFilter;
          });
       }
@@ -1008,20 +999,27 @@ export function AttendanceLogger() {
                     ₹{netPayout.toLocaleString('en-IN')}
                   </TableCell>
                   <TableCell className="text-center">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className={cn(
-                        "h-8 text-[10px] uppercase tracking-wider font-bold min-w-[70px]",
-                        paymentStatuses[entry.employeeRefId || entry.id.split('-')[0]] === 'Paid' 
-                          ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20" 
-                          : "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20"
-                      )}
-                      disabled={isAccountant}
-                      onClick={() => togglePaymentStatus(entry.employeeRefId || entry.id.split('-')[0])}
-                    >
-                      {paymentStatuses[entry.employeeRefId || entry.id.split('-')[0]] === 'Paid' ? 'Paid' : 'Unpaid'}
-                    </Button>
+                    {/* Derived from voucher existence -- read-only. Generate a
+                        voucher on the Vouchers screen to mark Paid. */}
+                    {(() => {
+                      const paid = isPaid(entry.employeeRefId || entry.id.split('-')[0]);
+                      return (
+                        <Badge
+                          variant="outline"
+                          title={paid
+                            ? "A voucher exists for this employee this period"
+                            : "No voucher yet -- generate one to mark Paid"}
+                          className={cn(
+                            "h-8 px-3 inline-flex items-center justify-center text-[10px] uppercase tracking-wider font-bold min-w-[70px]",
+                            paid
+                              ? "bg-green-500/10 text-green-600 border-green-500/30"
+                              : "bg-destructive/10 text-destructive border-destructive/30"
+                          )}
+                        >
+                          {paid ? 'Paid' : 'Unpaid'}
+                        </Badge>
+                      );
+                    })()}
                   </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">

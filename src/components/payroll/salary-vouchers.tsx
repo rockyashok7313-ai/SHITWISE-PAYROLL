@@ -20,6 +20,7 @@ import {
   yearForMonth,
   yearOptions
 } from "@/lib/payroll";
+import { periodLabel, parsePeriod, samePeriod } from "@/lib/voucher-period";
 
 /* ------------------------------------------------------------------ */
 /* Date + financial year helpers                                       */
@@ -52,61 +53,9 @@ function formatDisplayDate(iso?: string): string {
  * Worth migrating to { year: number, month: number } when you can run a
  * backfill. */
 
-function periodKey(month: string, year: string): string {
-  return `${month} ${year}`;
-}
-
-function parsePeriod(value?: string): { month: string; year: string } | null {
-  if (!value) return null;
-  const parts = value.trim().split(/\s+/);
-  if (parts.length < 2) return null;
-  const month = MONTHS.find(m => m.toLowerCase() === parts[0].toLowerCase());
-  if (!month) return null;
-  return { month, year: parts[1] };
-}
-
-function samePeriod(a?: string, b?: string): boolean {
-  const pa = parsePeriod(a);
-  const pb = parsePeriod(b);
-  if (!pa || !pb) return a === b;
-  return pa.month === pb.month && pa.year === pb.year;
-}
-
-/* ------------------------------------------------------------------ */
-/* Paid-status side store                                              */
-/* ------------------------------------------------------------------ */
-
-/* This mirrors payroll status into localStorage so the payroll screen can show
- * "Paid". It is per-browser and can drift from the real voucher records -- it
- * should really live on the voucher itself and be derived. Until then, every
- * mutation below keeps it in sync so an employee cannot stay marked Paid after
- * their voucher is deleted or reassigned. */
-
-function paidStatusKey(financialYear: string, month: string, year: string): string {
-  return `payroll_status_${financialYear}_${month}_${year}`;
-}
-
-function setPaidStatus(
-  financialYear: string,
-  month: string,
-  year: string,
-  employeeId: string,
-  paid: boolean
-) {
-  try {
-    const key = paidStatusKey(financialYear, month, year);
-    const existing = localStorage.getItem(key);
-    const statuses = existing ? JSON.parse(existing) : {};
-    if (paid) {
-      statuses[employeeId] = 'Paid';
-    } else {
-      delete statuses[employeeId];
-    }
-    localStorage.setItem(key, JSON.stringify(statuses));
-  } catch (err) {
-    console.error("Failed to update payroll paid status", err);
-  }
-}
+/* periodKey/parsePeriod/samePeriod now live in @/lib/voucher-period, shared with
+ * the register, which derives payroll "Paid" status from voucher existence via
+ * the same period matching. periodKey is periodLabel there. */
 
 /* ------------------------------------------------------------------ */
 /* Amount in words (Indian numbering)                                  */
@@ -235,7 +184,7 @@ export function SalaryVouchers() {
   const years = useMemo(() => yearOptions(activeFinancialYear), [activeFinancialYear]);
 
   const periodVouchers = useMemo(() => {
-    const target = periodKey(historyMonth, historyYear);
+    const target = periodLabel(historyMonth, historyYear);
     return safeVouchers
       .filter(v => samePeriod(v.month, target))
       .sort((a, b) =>
@@ -328,7 +277,7 @@ export function SalaryVouchers() {
   const buildPayload = (amount: number) => ({
     employeeId: voucherEmployee,
     employeeName: safeEmployees.find(e => e.id === voucherEmployee)?.name || 'Unknown',
-    month: periodKey(voucherMonth, voucherYear),
+    month: periodLabel(voucherMonth, voucherYear),
     date: voucherDate,
     // Kept as a string to match the existing stored shape. The model should move
     // to a number -- every read site already has to call Number(v.amount).
@@ -342,7 +291,7 @@ export function SalaryVouchers() {
     const amount = validateForm();
     if (amount === null) return;
 
-    const targetPeriod = periodKey(voucherMonth, voucherYear);
+    const targetPeriod = periodLabel(voucherMonth, voucherYear);
     if (findDuplicate(voucherEmployee, targetPeriod)) {
       toast({ variant: "destructive", title: "Duplicate Voucher", description: "A voucher has already been generated for this employee for the selected month." });
       return;
@@ -350,9 +299,10 @@ export function SalaryVouchers() {
 
     setIsSubmitting(true);
     try {
+      // Creating the voucher IS the Paid status now -- the register derives it
+      // from voucher existence, so there is no separate flag to set.
       await handleCreateVoucher(buildPayload(amount));
-      setPaidStatus(activeFinancialYear, voucherMonth, voucherYear, voucherEmployee, true);
-      toast({ title: "Success", description: "Voucher generated successfully and marked as Paid." });
+      toast({ title: "Success", description: "Voucher generated. This employee now shows as Paid for the period." });
       resetForm();
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message || "Failed to generate voucher." });
@@ -366,30 +316,18 @@ export function SalaryVouchers() {
     const amount = validateForm();
     if (amount === null) return;
 
-    const targetPeriod = periodKey(voucherMonth, voucherYear);
+    const targetPeriod = periodLabel(voucherMonth, voucherYear);
     if (findDuplicate(voucherEmployee, targetPeriod, editingVoucherId)) {
       toast({ variant: "destructive", title: "Duplicate Voucher", description: "Another voucher already exists for this employee for the selected month." });
       return;
     }
 
-    const original = safeVouchers.find(v => v.id === editingVoucherId);
-
     setIsSubmitting(true);
     try {
+      // Paid status follows the voucher: moving it to another employee or period
+      // moves the status automatically, since the register reads voucher
+      // existence. No flag to hand-migrate.
       await handleUpdateVoucher(editingVoucherId, buildPayload(amount));
-
-      // Move the Paid flag if the employee or period changed, otherwise the old
-      // employee stays marked Paid forever with no voucher behind it.
-      if (original) {
-        const movedEmployee = original.employeeId !== voucherEmployee;
-        const movedPeriod = !samePeriod(original.month, targetPeriod);
-        const previous = parsePeriod(original.month);
-        if ((movedEmployee || movedPeriod) && previous) {
-          setPaidStatus(activeFinancialYear, previous.month, previous.year, original.employeeId, false);
-        }
-      }
-      setPaidStatus(activeFinancialYear, voucherMonth, voucherYear, voucherEmployee, true);
-
       toast({ title: "Success", description: "Voucher updated successfully." });
       resetForm();
     } catch (e: any) {
@@ -419,16 +357,11 @@ export function SalaryVouchers() {
   const onDeleteVoucher = async (v: VoucherRecord) => {
     setBusyVoucherId(v.id);
     try {
+      // Deleting the voucher is what marks the employee Unpaid again -- the
+      // register no longer reads a separate flag.
       await handleDeleteVoucher(v.id);
-
-      // Clear the Paid flag, otherwise the payroll screen keeps showing Paid.
-      const parsed = parsePeriod(v.month);
-      if (parsed) {
-        setPaidStatus(activeFinancialYear, parsed.month, parsed.year, v.employeeId, false);
-      }
-
       if (editingVoucherId === v.id) resetForm();
-      toast({ title: "Deleted", description: `Voucher for ${v.employeeName} removed and unmarked as Paid.` });
+      toast({ title: "Deleted", description: `Voucher for ${v.employeeName} removed. This employee now shows as Unpaid for the period.` });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Error", description: e.message || "Failed to delete voucher." });
     } finally {

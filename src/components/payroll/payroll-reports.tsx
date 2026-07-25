@@ -39,6 +39,7 @@ import {
   yearOptions
 } from "@/lib/payroll";
 import { sumIncludedMonths, isHandEdited } from "@/lib/bonus-migration";
+import { paidEmployeeIds } from "@/lib/voucher-period";
 
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
@@ -136,7 +137,7 @@ interface BonusEntry {
 }
 
 export function PayrollReports() {
-  const { activeCompanyId, config, employees, attendance, vouchers, handleCreateVoucher, handleDeleteVoucher } = useAppContext();
+  const { activeCompanyId, config, employees, attendance, vouchers } = useAppContext();
   const { isAccountant } = useRole(activeCompanyId);
   const activeFinancialYear = config.financialYear;
   const { toast } = useToast();
@@ -434,21 +435,20 @@ export function PayrollReports() {
   const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
   const [reportData, setReportData] = useState<any[] | null>(null);
   const [selectedEmployeeForSlip, setSelectedEmployeeForSlip] = useState<any>(null);
-  const [paymentStatuses, setPaymentStatuses] = useState<Record<string, 'Paid' | 'Unpaid'>>({});
   const [searchQuery, setSearchQuery] = useState("");
+
+  /* Paid status is derived from voucher existence, not a stored flag. An
+   * employee is Paid for the period when a voucher exists for them in it, so
+   * generating or deleting a voucher moves the status with no side store to
+   * sync. Recomputes as the voucher list or the selected period changes. */
+  const paidIds = useMemo(
+    () => paidEmployeeIds(vouchers, selectedMonth, selectedYear),
+    [vouchers, selectedMonth, selectedYear]
+  );
+  const isPaid = (empId: string) => paidIds.has(empId);
 
   const handlePrint = () => {
     window.print();
-  };
-
-  const togglePaymentStatus = (empId: string) => {
-    setPaymentStatuses((prev: Record<string, 'Paid' | 'Unpaid'>) => {
-      const current = prev[empId] || 'Unpaid';
-      const next: 'Paid' | 'Unpaid' = current === 'Paid' ? 'Unpaid' : 'Paid';
-      const updated: Record<string, 'Paid' | 'Unpaid'> = { ...prev, [empId]: next };
-      localStorage.setItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`, JSON.stringify(updated));
-      return updated;
-    });
   };
 
   const handleDownloadExcel = async () => {
@@ -502,7 +502,7 @@ export function PayrollReports() {
       let exportEntries = reportData;
       if (statusFilter) {
          exportEntries = reportData.filter(row => {
-            const status = paymentStatuses[row.id] || 'Unpaid';
+            const status = isPaid(row.id) ? 'Paid' : 'Unpaid';
             return status === statusFilter;
          });
       }
@@ -811,12 +811,8 @@ Please contact HR if you have any questions.`;
         return newData;
       });
 
-      const savedStatuses = localStorage.getItem(`payroll_status_${activeFinancialYear}_${selectedMonth}_${selectedYear}`);
-      if (savedStatuses) {
-        setPaymentStatuses(JSON.parse(savedStatuses));
-      } else {
-        setPaymentStatuses({});
-      }
+      // Paid status is derived from the live voucher list (see paidIds), so
+      // there is nothing to load here anymore.
 
       setReportData(data);
       setIsGenerating(false);
@@ -1272,19 +1268,22 @@ Please contact HR if you have any questions.`;
                         <td className="p-4 text-right font-mono text-destructive">₹{row.deductions.toLocaleString('en-IN')}</td>
                         <td className="p-4 text-right font-headline font-black text-accent">₹{row.net.toLocaleString('en-IN')}</td>
                         <td className="p-4 text-center no-print">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
+                          {/* Derived from voucher existence -- read-only. To mark
+                              Paid, generate a voucher on the Vouchers screen. */}
+                          <Badge
+                            variant="outline"
+                            title={isPaid(row.id)
+                              ? "A voucher exists for this employee this period"
+                              : "No voucher yet -- generate one to mark Paid"}
                             className={cn(
-                              "h-7 text-[10px] uppercase tracking-wider font-bold min-w-[80px]",
-                              paymentStatuses[row.id] === 'Paid' 
-                                ? "bg-green-500/10 text-green-600 border-green-500/30 hover:bg-green-500/20" 
-                                : "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/20"
+                              "h-7 px-3 inline-flex items-center text-[10px] uppercase tracking-wider font-bold min-w-[80px] justify-center",
+                              isPaid(row.id)
+                                ? "bg-green-500/10 text-green-600 border-green-500/30"
+                                : "bg-destructive/10 text-destructive border-destructive/30"
                             )}
-                            onClick={() => togglePaymentStatus(row.id)}
                           >
-                            {paymentStatuses[row.id] === 'Paid' ? 'Paid' : 'Unpaid'}
-                          </Button>
+                            {isPaid(row.id) ? 'Paid' : 'Unpaid'}
+                          </Badge>
                         </td>
                       </tr>
                     ))}
@@ -1302,14 +1301,14 @@ Please contact HR if you have any questions.`;
                     <tr className="bg-green-500/10 border-t border-green-500/20">
                       <td colSpan={6} className="p-3 text-right text-green-700 uppercase text-xs font-bold tracking-wider">Total Paid Salary</td>
                       <td className="p-3 text-right text-green-700 font-headline font-black text-lg">
-                        ₹{reportData.filter(r => paymentStatuses[r.id] === 'Paid').reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
+                        ₹{reportData.filter(r => isPaid(r.id)).reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
                       </td>
                       <td className="no-print"></td>
                     </tr>
                     <tr className="bg-destructive/10 border-t border-destructive/20">
                       <td colSpan={6} className="p-3 text-right text-destructive uppercase text-xs font-bold tracking-wider">Total Unpaid Salary</td>
                       <td className="p-3 text-right text-destructive font-headline font-black text-lg">
-                        ₹{reportData.filter(r => paymentStatuses[r.id] !== 'Paid').reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
+                        ₹{reportData.filter(r => !isPaid(r.id)).reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
                       </td>
                       <td className="no-print"></td>
                     </tr>
