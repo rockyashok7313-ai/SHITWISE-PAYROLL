@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { LegacyAttendanceLog } from '../../src/lib/bonus-migration';
 import {
-  resolveBonusYear,
   sumIncludedMonths,
   legacyMonthlySalary,
   isHandEdited
@@ -15,29 +14,9 @@ import {
 
 const DEFAULT_MONTHLY = 23400; // 26 days x 100/hr x 9h
 
-describe('resolveBonusYear', () => {
-  it('puts January through September in the second calendar year', () => {
-    expect(resolveBonusYear('January', '2026-2027')).toBe('2027');
-    expect(resolveBonusYear('September', '2026-2027')).toBe('2027');
-  });
-
-  it('puts October through December in the first calendar year', () => {
-    expect(resolveBonusYear('October', '2026-2027')).toBe('2026');
-    expect(resolveBonusYear('December', '2026-2027')).toBe('2026');
-  });
-
-  it('passes a plain calendar year through unchanged', () => {
-    expect(resolveBonusYear('January', '2026')).toBe('2026');
-    expect(resolveBonusYear('October', '2026')).toBe('2026');
-  });
-
-  it('keeps the bonus view October-September convention, not payroll April-March', () => {
-    // Deliberate divergence from yearForMonth(). April is the second year here
-    // and the first year there. Changing this shifts which attendance feeds
-    // each bonus year, so it is pinned to catch an accidental "unification".
-    expect(resolveBonusYear('April', '2026-2027')).toBe('2027');
-  });
-});
+/* The bonus month -> year mapping is now yearForMonth in @/lib/payroll, tested
+ * in payroll.test.ts. The bonus view and the register share one convention
+ * (October -> September), so there is no separate resolveBonusYear to test. */
 
 describe('sumIncludedMonths', () => {
   const salaries: Record<string, number> = {

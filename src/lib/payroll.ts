@@ -247,15 +247,35 @@ export function filterAttendanceForPeriod(
 /* Financial year                                                      */
 /* ------------------------------------------------------------------ */
 
-/** Indian financial year runs April -> March, so FY "2026-2027" + January = 2027. */
+/**
+ * The calendar month the financial year starts in, as a MONTHS index.
+ *
+ * October (index 9): the business runs an October -> September fiscal year, so
+ * FY "2026-2027" spans October 2026 through September 2027.
+ *
+ * This is the SINGLE definition of the convention. yearForMonth derives from
+ * it, and the bonus calculator, the register and the voucher period defaults
+ * all go through yearForMonth -- there is deliberately no second copy of this
+ * boundary to drift out of step. (Change this to 3 to switch back to an
+ * April -> March year.)
+ */
+export const FISCAL_YEAR_START_MONTH_INDEX = 9; // October
+
+/**
+ * The calendar year a month falls in within a financial year.
+ *
+ * With an October -> September year, October/November/December belong to the
+ * starting calendar year and January -> September to the ending one. So for
+ * FY "2026-2027": December -> 2026, but April, July and September -> 2027.
+ */
 export function yearForMonth(monthName: string, financialYear: string): string {
   const [startStr, endStr] = (financialYear || "").split("-");
   const start = Number(startStr);
   if (!start) return `${new Date().getFullYear()}`;
   const end = Number(endStr) || start + 1;
   const monthIndex = MONTHS.indexOf(monthName);
-  // April (index 3) onwards belongs to the starting calendar year.
-  return monthIndex >= 3 ? `${start}` : `${end}`;
+  if (monthIndex < 0) return `${start}`;
+  return monthIndex >= FISCAL_YEAR_START_MONTH_INDEX ? `${start}` : `${end}`;
 }
 
 /**

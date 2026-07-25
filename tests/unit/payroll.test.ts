@@ -315,27 +315,37 @@ describe('filterAttendanceForPeriod', () => {
 });
 
 describe('yearForMonth', () => {
-  it('puts April through December in the starting calendar year', () => {
-    expect(yearForMonth('April', '2026-2027')).toBe('2026');
+  // The fiscal year runs October -> September (see FISCAL_YEAR_START_MONTH_INDEX).
+  it('puts October through December in the starting calendar year', () => {
+    expect(yearForMonth('October', '2026-2027')).toBe('2026');
+    expect(yearForMonth('November', '2026-2027')).toBe('2026');
     expect(yearForMonth('December', '2026-2027')).toBe('2026');
   });
 
-  it('puts January through March in the ending calendar year', () => {
-    // The bug this exists to prevent: January of FY 2026-2027 is 2027, not 2026.
+  it('puts January through September in the ending calendar year', () => {
     expect(yearForMonth('January', '2026-2027')).toBe('2027');
-    expect(yearForMonth('February', '2026-2027')).toBe('2027');
     expect(yearForMonth('March', '2026-2027')).toBe('2027');
+    // April..September sit in the ending year too -- this is the point of the
+    // October->September convention, and where it differs from April->March.
+    expect(yearForMonth('April', '2026-2027')).toBe('2027');
+    expect(yearForMonth('July', '2026-2027')).toBe('2027');
+    expect(yearForMonth('September', '2026-2027')).toBe('2027');
   });
 
-  it('derives the end year when the financial year is a single year', () => {
-    expect(yearForMonth('April', '2026')).toBe('2026');
+  it('derives the end year (start + 1) when the financial year is a single year', () => {
+    expect(yearForMonth('October', '2026')).toBe('2026');
     expect(yearForMonth('January', '2026')).toBe('2027');
+    expect(yearForMonth('April', '2026')).toBe('2027');
   });
 
   it('falls back to the current year for an unusable financial year', () => {
     const thisYear = String(new Date().getFullYear());
     expect(yearForMonth('April', '')).toBe(thisYear);
     expect(yearForMonth('April', 'not-a-year')).toBe(thisYear);
+  });
+
+  it('treats an unknown month as the starting calendar year', () => {
+    expect(yearForMonth('Smarch', '2026-2027')).toBe('2026');
   });
 });
 

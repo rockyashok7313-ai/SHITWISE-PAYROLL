@@ -17,26 +17,10 @@
 
 import { MONTHS } from './payroll';
 
-/** Months of the financial year that fall in its second calendar year. */
-const SECOND_YEAR_MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September'
-];
-
-/**
- * Which calendar year a month's attendance belongs to for the bonus ledger.
- *
- * NOTE: this treats January-September as the second year, i.e. a financial year
- * running October-September. That is a DIFFERENT convention from yearForMonth()
- * in ./payroll, which runs April-March. Both are preserved as they are on
- * purpose -- changing this one would change which months of attendance feed
- * each bonus year, silently altering every bonus figure. Reconcile the two
- * deliberately, not as a side effect.
- */
-export function resolveBonusYear(monthName: string, year: string): string {
-  if (!year.includes('-')) return year;
-  const fyParts = year.split('-');
-  return SECOND_YEAR_MONTHS.includes(monthName) ? fyParts[1] : fyParts[0];
-}
+/* The bonus ledger's month -> calendar year mapping is no longer defined here.
+ * It used to run October-September while the register ran April-March; the two
+ * are now unified on yearForMonth() in ./payroll (October-September). Callers
+ * pass the resolved `expectedYear` in, so there is one implementation. */
 
 /** Yearly total across only the months the user left ticked. */
 export function sumIncludedMonths(

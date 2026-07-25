@@ -38,7 +38,7 @@ import {
   yearForMonth,
   yearOptions
 } from "@/lib/payroll";
-import { resolveBonusYear, sumIncludedMonths, isHandEdited } from "@/lib/bonus-migration";
+import { sumIncludedMonths, isHandEdited } from "@/lib/bonus-migration";
 
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
@@ -63,16 +63,11 @@ const FY_MONTHS = [
   "January", "February", "March", "April", "May", "June", "July", "August", "September"
 ];
 
-const getMonthYearLabel = (month: string, fy: string) => {
-  const parts = fy.split('-');
-  const startYear = parts[0];
-  const endYear = parts.length > 1 ? parts[1] : startYear;
-  const isSecondYear = [
-    "January", "February", "March", "April", "May", "June", "July", "August", "September"
-  ].includes(month);
-  const year = isSecondYear ? endYear : startYear;
-  return `${month.toUpperCase()} ${year}`;
-};
+/* Uses the shared yearForMonth so the column labels cannot disagree with the
+ * attendance the bonus loop actually pulls. FY_MONTHS above is already ordered
+ * October-first, matching the October -> September convention. */
+const getMonthYearLabel = (month: string, fy: string) =>
+  `${month.toUpperCase()} ${yearForMonth(month, fy)}`;
 
 /* YEARS is now generated per financial year via yearOptions() -- the hardcoded
  * ["2023".."2027"] list would have stopped offering the current year in 2028. */
@@ -102,9 +97,10 @@ function readBonusLedger(key: string): any[] | null {
   }
 }
 
-/* resolveBonusYear, sumIncludedMonths and isHandEdited live in
- * @/lib/bonus-migration so the v1 classification -- which decides whether a
- * user's typed figure survives -- is covered by tests. */
+/* sumIncludedMonths and isHandEdited live in @/lib/bonus-migration so the v1
+ * classification -- which decides whether a user's typed figure survives -- is
+ * covered by tests. The month -> year mapping is yearForMonth from @/lib/payroll,
+ * shared with the register and vouchers. */
 
 interface PayrollReportsProps {
   // Now using AppContext
@@ -251,7 +247,7 @@ export function PayrollReports() {
       const prior = legacyById.get(emp.id);
 
       MONTHS.forEach(mName => {
-        const expectedYear = resolveBonusYear(mName, year);
+        const expectedYear = yearForMonth(mName, year);
 
         const empLogs = filterAttendanceForPeriod(
           (attendance || []) as AttendanceEntry[],
