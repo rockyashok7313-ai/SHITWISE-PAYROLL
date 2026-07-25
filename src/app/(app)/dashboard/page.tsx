@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { History } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
 import { TiltCard } from "@/components/ui/tilt-card";
+import { Stagger, StaggerItem } from "@/components/ui/motion";
 import dynamic from "next/dynamic";
 
 const LiveShiftGauge = dynamic(() => import("@/components/ui/shift-gauge").then(m => m.LiveShiftGauge), { ssr: false });
@@ -19,7 +20,8 @@ export default function DashboardPage() {
   const gaugeValue = attendance.length > 0 ? 0.8 : 0.2;
 
   return (
-    <div className="p-8 h-full overflow-y-auto space-y-6">
+    <Stagger className="p-8 h-full overflow-y-auto space-y-6" stagger={0.08}>
+      <StaggerItem>
       <header className="mb-8 flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-headline font-bold tracking-tight text-foreground">
@@ -31,9 +33,11 @@ export default function DashboardPage() {
            <LiveShiftGauge value={gaugeValue} />
         </div>
       </header>
+      </StaggerItem>
 
-      <ShiftStats />
+      <StaggerItem><ShiftStats /></StaggerItem>
 
+      <StaggerItem>
       <TiltCard>
         <Card className="bg-card/30 border-border">
           <CardHeader>
@@ -97,6 +101,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </TiltCard>
-    </div>
+      </StaggerItem>
+    </Stagger>
   );
 }

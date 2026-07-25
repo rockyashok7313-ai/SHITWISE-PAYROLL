@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Lock, Mail, Factory, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
+import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion"
 
 const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
@@ -75,52 +76,61 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative">
       <LoginBackground />
-      <Card className="w-full max-w-md bg-card/60 backdrop-blur-xl border-border relative z-10 shadow-2xl">
+      <FadeIn y={16} className="w-full max-w-md relative z-10">
+      <Card className="w-full bg-card/60 backdrop-blur-xl border-border shadow-2xl">
+        <Stagger stagger={0.07} delayChildren={0.1}>
         <CardHeader className="space-y-2 text-center pb-8 pt-8">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 border border-primary/20">
-            <Factory className="w-8 h-8 text-primary" />
-          </div>
-          <div className="space-y-2">
-            <CardTitle className="text-3xl font-headline tracking-tight">ShiftWise</CardTitle>
-            <CardDescription className="text-sm">Secure Factory Payroll & Attendance</CardDescription>
-          </div>
+          <StaggerItem>
+            <div className="mx-auto w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4 border border-primary/20">
+              <Factory className="w-8 h-8 text-primary" />
+            </div>
+            <div className="space-y-2">
+              <CardTitle className="text-3xl font-headline tracking-tight">ShiftWise</CardTitle>
+              <CardDescription className="text-sm">Secure Factory Payroll &amp; Attendance</CardDescription>
+            </div>
+          </StaggerItem>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
+          <StaggerItem>
           <div className="space-y-2">
             <Label htmlFor="email" className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Email Address</Label>
             <div className="relative">
               <Mail className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-              <Input 
-                id="email" 
-                type="email" 
+              <Input
+                id="email"
+                type="email"
                 placeholder="admin@factory.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 transition-colors" 
+                className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
               />
             </div>
           </div>
+          </StaggerItem>
+          <StaggerItem>
           <div className="space-y-2">
             <Label htmlFor="password" className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Password</Label>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-              <Input 
-                id="password" 
-                type="password" 
+              <Input
+                id="password"
+                type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 transition-colors" 
+                className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
                 onKeyDown={(e) => e.key === 'Enter' && handleAuth(false)}
               />
             </div>
           </div>
+          </StaggerItem>
         </CardContent>
-        
+
         <CardFooter className="flex flex-col gap-3 pb-8">
-          <Button 
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-lg shadow-primary/20 transition-all hover:shadow-primary/30 active:scale-[0.98]" 
+          <StaggerItem className="w-full flex flex-col gap-3">
+          <Button
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-lg shadow-primary/20 transition-all hover:shadow-primary/30 active:scale-[0.98]"
             onClick={() => handleAuth(false)}
             disabled={loading}
           >
@@ -130,16 +140,19 @@ export default function LoginPage() {
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/50"></div></div>
             <span className="relative bg-card px-2 text-xs text-muted-foreground">OR</span>
           </div>
-          <Button 
-            variant="outline" 
-            className="w-full border-border/50 bg-background/30 hover:bg-background/50 transition-all active:scale-[0.98]" 
+          <Button
+            variant="outline"
+            className="w-full border-border/50 bg-background/30 hover:bg-background/50 transition-all active:scale-[0.98]"
             onClick={() => handleAuth(true)}
             disabled={loading}
           >
             Create New Account
           </Button>
+          </StaggerItem>
         </CardFooter>
+        </Stagger>
       </Card>
+      </FadeIn>
     </div>
   )
 }

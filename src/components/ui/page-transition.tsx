@@ -1,30 +1,29 @@
 "use client"
 
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { usePathname } from "next/navigation";
+import { EASE_OUT } from "@/components/ui/motion";
 
+/**
+ * Route-change transition. Rendered from template.tsx (inside AnimatePresence),
+ * keyed on the pathname so navigations cross-fade.
+ *
+ * Honours prefers-reduced-motion: reduced -> a short opacity cross-fade only;
+ * otherwise a gentle rise-in / lift-out. The old version always scaled from
+ * 0.98 and ignored the reduced-motion setting.
+ */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-
-  // "Use prefers-reduced-motion to freeze page transitions to a simple opacity cross-fade"
-  // framer-motion respects `prefers-reduced-motion: user` if configured or we can rely on standard CSS.
-  // Actually, framer-motion checks `prefers-reduced-motion` at the OS level by default for spring animations, 
-  // but to explicitly respect it for layout/scale, we can just supply a basic fade for reduced motion or use variants.
-  
-  // Note: For Next.js App Router, AnimatePresence is tricky across layouts unless you wrap it at the template.tsx level.
-  // But we are wrapping the content here.
+  const reduce = useReducedMotion();
 
   return (
     <motion.div
       key={pathname}
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 1 }}
-      transition={{ 
-        duration: 0.3, 
-        ease: "easeOut" 
-      }}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
+      animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, y: -6 }}
+      transition={{ duration: reduce ? 0.15 : 0.35, ease: EASE_OUT }}
       className="w-full h-full"
     >
       {children}
