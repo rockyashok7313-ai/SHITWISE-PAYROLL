@@ -2,11 +2,20 @@
 
 import React from "react";
 import { AppProvider } from "@/components/providers/app-provider";
-import { SidebarNav } from "@/components/layout/sidebar-nav";
-import { Clock, ShieldCheck, History as HistoryIcon, Users, FileSpreadsheet, LayoutDashboard, Settings, ReceiptText } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { Clock, ShieldCheck, History as HistoryIcon, Users, FileSpreadsheet, LayoutDashboard, Settings, ReceiptText, LogOut } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { supabase } from "@/lib/supabase";
+
+/* NOTE: this file used to import SidebarNav from @/components/layout/sidebar-nav
+ * but never rendered it -- this hand-built rail is the actual navigation shell.
+ * That meant the Log Out button and theme toggle that lived inside SidebarNav
+ * were dead code: present in the source, never on screen. sidebar-nav.tsx is
+ * left as-is (SidebarNav is unused but harmless) rather than deleted here, since
+ * that is a separate cleanup decision. */
 
 const items = [
   {
@@ -53,6 +62,18 @@ const items = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [signingOut, setSigningOut] = React.useState(false);
+
+  const handleLogout = async () => {
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      router.push("/login");
+    } catch {
+      setSigningOut(false);
+    }
+  };
 
   return (
     <AppProvider>
@@ -92,6 +113,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
+
+          <div className="p-4 border-t border-sidebar-border space-y-1">
+            <div className="flex items-center justify-between px-3 py-2">
+              <span className="text-sm font-medium text-sidebar-foreground">Theme</span>
+              <ThemeToggle />
+            </div>
+            <Button
+              variant="ghost"
+              onClick={handleLogout}
+              disabled={signingOut}
+              className="w-full justify-start gap-3 h-11 px-3 text-red-500/80 hover:bg-red-500/10 hover:text-red-500 transition-all"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium">{signingOut ? "Signing out..." : "Log Out"}</span>
+            </Button>
+          </div>
         </div>
 
         {/* Main Content Area */}
