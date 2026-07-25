@@ -1,7 +1,8 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { mergeById, liveRecords, recordsToPush } from "@/lib/sync";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/hooks/use-role";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +40,10 @@ const voucherToRow = (v: any, companyId: string) => ({
   amount: Number(v.amount) || 0,
   payment_method: v.paymentMethod,
   remarks: v.remarks || null,
+  // Sync fields. updatedAt is the merge version key; default it so pre-sync
+  // vouchers get a timestamp the first time they are written up.
+  updated_at: v.updatedAt || new Date().toISOString(),
+  deleted_at: v.deletedAt || null,
 });
 
 const rowToVoucher = (r: any) => ({
@@ -50,6 +55,8 @@ const rowToVoucher = (r: any) => ({
   amount: r.amount,
   paymentMethod: r.payment_method,
   remarks: r.remarks || "",
+  updatedAt: r.updated_at || null,
+  deletedAt: r.deleted_at || null,
 });
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -251,19 +258,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const localVouchersString = localStorage.getItem(`vouchers_${activeId}`);
       const localVouchers = localVouchersString ? (JSON.parse(localVouchersString) || []) : [];
 
-      if (vouchErr || !dbVouchers || (localVouchers.length > dbVouchers.length)) {
-        // Table missing (pre-migration) or cloud behind local: use local, and
-        // push local up when it is ahead -- this also migrates pre-existing
-        // localStorage vouchers into the table the first time it exists.
+      if (vouchErr || !dbVouchers) {
+        // Table missing (pre-migration) or offline: keep the local set as-is,
+        // tombstones and all, so nothing is lost before the next successful sync.
         setVouchers(localVouchers);
-        if (!vouchErr && dbVouchers && (localVouchers.length > dbVouchers.length)) {
-          const { error } = await supabase.from('vouchers').upsert(localVouchers.map((v: any) => voucherToRow(v, activeId)));
+      } else {
+        // Merge per record by id (see @/lib/sync): newer updatedAt wins, tombstones
+        // propagate. Persist the full merged set incl. tombstones, expose only the
+        // live records, and push back just what remote is missing or behind on.
+        const remoteVouchers = dbVouchers.map(rowToVoucher);
+        const mergedVouchers = mergeById(localVouchers, remoteVouchers);
+        setVouchers(mergedVouchers);
+        localStorage.setItem(`vouchers_${activeId}`, JSON.stringify(mergedVouchers));
+
+        const toPush = recordsToPush(mergedVouchers, remoteVouchers);
+        if (toPush.length > 0) {
+          const { error } = await supabase.from('vouchers').upsert(toPush.map((v: any) => voucherToRow(v, activeId)));
           if (error) console.error("Supabase upsert vouchers error:", error);
         }
-      } else {
-        const mappedVouchers = dbVouchers.map(rowToVoucher);
-        setVouchers(mappedVouchers);
-        localStorage.setItem(`vouchers_${activeId}`, JSON.stringify(mappedVouchers));
       }
       // Auto Backup Logic
       const lastBackup = localStorage.getItem('last_auto_backup_date');
@@ -366,13 +378,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Vouchers were previously not reloaded on company switch, leaving the
     // prior company's vouchers in state. Load them here too.
     const { data: dbVouchers, error: vouchErr } = await supabase.from('vouchers').select('*').eq('company_id', id);
+    const localVouchersString = localStorage.getItem(`vouchers_${id}`);
+    const localVouchers = localVouchersString ? (JSON.parse(localVouchersString) || []) : [];
     if (vouchErr || !dbVouchers) {
-      const localVouchers = localStorage.getItem(`vouchers_${id}`);
-      setVouchers(localVouchers ? JSON.parse(localVouchers) : []);
+      setVouchers(localVouchers);
     } else {
-      const mappedVouchers = dbVouchers.map(rowToVoucher);
-      setVouchers(mappedVouchers);
-      localStorage.setItem(`vouchers_${id}`, JSON.stringify(mappedVouchers));
+      const remoteVouchers = dbVouchers.map(rowToVoucher);
+      const mergedVouchers = mergeById(localVouchers, remoteVouchers);
+      setVouchers(mergedVouchers);
+      localStorage.setItem(`vouchers_${id}`, JSON.stringify(mergedVouchers));
+
+      const toPush = recordsToPush(mergedVouchers, remoteVouchers);
+      if (toPush.length > 0) {
+        const { error } = await supabase.from('vouchers').upsert(toPush.map((v: any) => voucherToRow(v, id)));
+        if (error) console.error("Supabase upsert vouchers error:", error);
+      }
     }
 
     setLoading(false);
@@ -516,7 +536,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!activeCompanyId) return;
-    const newVoucher = { ...voucher, id: `vouch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` };
+    const now = new Date().toISOString();
+    const newVoucher = {
+      ...voucher,
+      id: `vouch_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      updatedAt: now,
+      deletedAt: null,
+    };
     const updated = [newVoucher, ...vouchers];
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
@@ -531,7 +557,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!activeCompanyId) return;
-    const updated = vouchers.map((v: any) => v.id === id ? { ...v, ...updates } : v);
+    const now = new Date().toISOString();
+    const updated = vouchers.map((v: any) => v.id === id ? { ...v, ...updates, updatedAt: now } : v);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
 
@@ -548,13 +575,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!activeCompanyId) return;
-    const updated = vouchers.filter((v: any) => v.id !== id);
+    // Soft delete: write a tombstone rather than removing the row, so the delete
+    // propagates to other machines instead of a shorter list looking "behind"
+    // and the row being resurrected. Live-only exposure hides it from the UI.
+    const now = new Date().toISOString();
+    const updated = vouchers.map((v: any) => v.id === id ? { ...v, deletedAt: now, updatedAt: now } : v);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
 
-    const { error } = await supabase.from('vouchers').delete().eq('id', id);
+    const { error } = await supabase.from('vouchers').update({ deleted_at: now, updated_at: now }).eq('id', id);
     if (error) console.error("Supabase delete voucher error:", error);
   };
+
+  /* The `vouchers` state holds the full merged set including tombstones -- the
+   * handlers and localStorage need those to keep deletions propagating. But
+   * consumers must only ever see live vouchers, so expose the filtered set,
+   * memoised for a stable identity (consumers use it in useMemo deps). */
+  const visibleVouchers = useMemo(() => liveRecords(vouchers), [vouchers]);
 
   return (
     <AppContext.Provider value={{
@@ -563,7 +600,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       config,
       employees,
       attendance,
-      vouchers,
+      vouchers: visibleVouchers,
       loading,
       setActiveCompanyId,
       handleCreateCompany,
