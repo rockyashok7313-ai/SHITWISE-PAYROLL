@@ -3,7 +3,46 @@
 @tailwind utilities;
 
 @layer base {
+  /* Light theme (default :root). Shared tokens (radius, custom colours) live
+     here and are inherited by .dark. */
   :root {
+    --background: 0 0% 100%;
+    --foreground: 225 20% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 225 20% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 225 20% 12%;
+    --primary: 226 80% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 225 20% 94%;
+    --secondary-foreground: 225 20% 18%;
+    --muted: 225 20% 96%;
+    --muted-foreground: 225 12% 42%;
+    --accent: 186 85% 38%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 225 18% 88%;
+    --input: 225 18% 88%;
+    --ring: 226 80% 56%;
+    --radius: 0.25rem;
+
+    --metal-highlight: #C7CDD9;
+    --warning-amber: #F2A65A;
+    --success-teal: #2DD4BF;
+
+    --sidebar-background: 225 20% 97%;
+    --sidebar-foreground: 225 12% 28%;
+    --sidebar-primary: 226 80% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 20% 92%;
+    --sidebar-accent-foreground: 225 20% 18%;
+    --sidebar-border: 225 18% 88%;
+    --sidebar-ring: 226 80% 56%;
+  }
+
+  /* Dark theme (the original palette). */
+  .dark {
     --background: 225 17% 7%;
     --foreground: 0 0% 100%;
     --card: 225 17% 10%;
@@ -23,11 +62,6 @@
     --border: 225 17% 18%;
     --input: 225 17% 18%;
     --ring: 226 87% 66%;
-    --radius: 0.25rem;
-    
-    --metal-highlight: #C7CDD9;
-    --warning-amber: #F2A65A;
-    --success-teal: #2DD4BF;
 
     --sidebar-background: 225 17% 5%;
     --sidebar-foreground: 225 10% 80%;

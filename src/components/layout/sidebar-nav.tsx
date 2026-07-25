@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -139,8 +140,12 @@ export function SidebarNav({
           <Settings className="w-4 h-4" />
           <span className="text-sm font-medium">Settings</span>
         </Button>
-        <Button 
-          variant="ghost" 
+        <div className="flex items-center justify-between pl-3 pr-1 h-11 mt-1">
+          <span className="text-sm font-medium text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
+        <Button
+          variant="ghost"
           onClick={async () => {
             const { supabase } = await import('@/lib/supabase');
             await supabase.auth.signOut();

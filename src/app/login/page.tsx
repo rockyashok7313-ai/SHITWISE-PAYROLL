@@ -11,6 +11,7 @@ import { Lock, Mail, Factory, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
@@ -76,6 +77,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative">
       <LoginBackground />
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
       <FadeIn y={16} className="w-full max-w-md relative z-10">
       <Card className="w-full bg-card/60 backdrop-blur-xl border-border shadow-2xl">
         <Stagger stagger={0.07} delayChildren={0.1}>
