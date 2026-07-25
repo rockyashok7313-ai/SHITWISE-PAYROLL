@@ -26,6 +26,32 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+/* Voucher field mapping between the app's camelCase shape and the snake_case
+ * `vouchers` table, mirroring how attendance/employees are mapped elsewhere in
+ * this provider. */
+const voucherToRow = (v: any, companyId: string) => ({
+  id: v.id,
+  company_id: companyId,
+  employee_id: v.employeeId,
+  employee_name: v.employeeName,
+  month: v.month,
+  date: v.date,
+  amount: Number(v.amount) || 0,
+  payment_method: v.paymentMethod,
+  remarks: v.remarks || null,
+});
+
+const rowToVoucher = (r: any) => ({
+  id: r.id,
+  employeeId: r.employee_id,
+  employeeName: r.employee_name,
+  month: r.month,
+  date: r.date,
+  amount: r.amount,
+  paymentMethod: r.payment_method,
+  remarks: r.remarks || "",
+});
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -221,11 +247,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem(`attendance_${activeId}`, JSON.stringify(mappedAtt));
       }
       
-      const localVouchers = localStorage.getItem(`vouchers_${activeId}`);
-      if (localVouchers) {
-        setVouchers(JSON.parse(localVouchers));
+      const { data: dbVouchers, error: vouchErr } = await supabase.from('vouchers').select('*').eq('company_id', activeId);
+      const localVouchersString = localStorage.getItem(`vouchers_${activeId}`);
+      const localVouchers = localVouchersString ? (JSON.parse(localVouchersString) || []) : [];
+
+      if (vouchErr || !dbVouchers || (localVouchers.length > dbVouchers.length)) {
+        // Table missing (pre-migration) or cloud behind local: use local, and
+        // push local up when it is ahead -- this also migrates pre-existing
+        // localStorage vouchers into the table the first time it exists.
+        setVouchers(localVouchers);
+        if (!vouchErr && dbVouchers && (localVouchers.length > dbVouchers.length)) {
+          const { error } = await supabase.from('vouchers').upsert(localVouchers.map((v: any) => voucherToRow(v, activeId)));
+          if (error) console.error("Supabase upsert vouchers error:", error);
+        }
       } else {
-        setVouchers([]);
+        const mappedVouchers = dbVouchers.map(rowToVoucher);
+        setVouchers(mappedVouchers);
+        localStorage.setItem(`vouchers_${activeId}`, JSON.stringify(mappedVouchers));
       }
       // Auto Backup Logic
       const lastBackup = localStorage.getItem('last_auto_backup_date');
@@ -315,16 +353,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const localAtt = localStorage.getItem(`attendance_${id}`);
       setAttendance(localAtt ? JSON.parse(localAtt) : []);
     } else {
-      const mappedAtt = dbAttendance.map(a => ({ 
-        ...a, 
+      const mappedAtt = dbAttendance.map(a => ({
+        ...a,
         employeeRefId: a.employee_id,
         weeklyAdvance: a.weekly_advance,
-        isModified: a.is_modified 
+        isModified: a.is_modified
       }));
       setAttendance(mappedAtt);
       localStorage.setItem(`attendance_${id}`, JSON.stringify(mappedAtt));
     }
-    
+
+    // Vouchers were previously not reloaded on company switch, leaving the
+    // prior company's vouchers in state. Load them here too.
+    const { data: dbVouchers, error: vouchErr } = await supabase.from('vouchers').select('*').eq('company_id', id);
+    if (vouchErr || !dbVouchers) {
+      const localVouchers = localStorage.getItem(`vouchers_${id}`);
+      setVouchers(localVouchers ? JSON.parse(localVouchers) : []);
+    } else {
+      const mappedVouchers = dbVouchers.map(rowToVoucher);
+      setVouchers(mappedVouchers);
+      localStorage.setItem(`vouchers_${id}`, JSON.stringify(mappedVouchers));
+    }
+
     setLoading(false);
   };
 
@@ -470,6 +520,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = [newVoucher, ...vouchers];
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+
+    const { error } = await supabase.from('vouchers').insert([voucherToRow(newVoucher, activeCompanyId)]);
+    if (error) console.error("Supabase insert voucher error:", error);
   };
 
   const handleUpdateVoucher = async (id: string, updates: any) => {
@@ -481,6 +534,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = vouchers.map((v: any) => v.id === id ? { ...v, ...updates } : v);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+
+    const changed = updated.find((v: any) => v.id === id);
+    if (changed) {
+      const { error } = await supabase.from('vouchers').update(voucherToRow(changed, activeCompanyId)).eq('id', id);
+      if (error) console.error("Supabase update voucher error:", error);
+    }
   };
 
   const handleDeleteVoucher = async (id: string) => {
@@ -492,6 +551,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = vouchers.filter((v: any) => v.id !== id);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+
+    const { error } = await supabase.from('vouchers').delete().eq('id', id);
+    if (error) console.error("Supabase delete voucher error:", error);
   };
 
   return (
