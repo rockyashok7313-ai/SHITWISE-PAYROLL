@@ -21,6 +21,7 @@ import {
   yearOptions
 } from "@/lib/payroll";
 import { periodLabel, parsePeriod, samePeriod } from "@/lib/voucher-period";
+import { reconcilePeriod, VoucherReconcileResult } from "@/lib/voucher-reconcile";
 
 /* ------------------------------------------------------------------ */
 /* Date + financial year helpers                                       */
@@ -196,6 +197,20 @@ export function SalaryVouchers() {
   const bankTotal = periodVouchers.filter(v => v.paymentMethod === 'Bank').reduce((sum, v) => sum + Number(v.amount), 0);
   const cashTotal = periodVouchers.filter(v => v.paymentMethod === 'Cash').reduce((sum, v) => sum + Number(v.amount), 0);
 
+  /* Reconcile each voucher's stored amount against the current calculation.
+   * Vouchers created before the pay calculation was unified can hold a stale
+   * amount; this recomputes and flags the drift for review. */
+  const reconciliation = useMemo(
+    () => reconcilePeriod(periodVouchers, safeEmployees as any, safeAttendance as AttendanceEntry[]),
+    [periodVouchers, safeEmployees, safeAttendance]
+  );
+  const reconcileById = useMemo(() => {
+    const m = new Map<string, VoucherReconcileResult>();
+    for (const r of reconciliation.results) m.set(r.voucherId, r);
+    return m;
+  }, [reconciliation]);
+  const [isReconcilingAll, setIsReconcilingAll] = useState(false);
+
   /* `useState` initialisers run once, so the periods above froze at the fallback
    * financial year when `config` was still loading. Re-sync when the real
    * financial year arrives or changes. */
@@ -367,6 +382,44 @@ export function SalaryVouchers() {
     } finally {
       setBusyVoucherId(null);
       setPendingDeleteId(null);
+    }
+  };
+
+  /* ---------------------------------------------------------------- */
+  /* Reconciliation                                                    */
+  /* ---------------------------------------------------------------- */
+
+  // Update one voucher's stored amount to the freshly computed net.
+  const onFixVoucher = async (v: VoucherRecord) => {
+    const result = reconcileById.get(v.id);
+    if (!result || result.status !== 'mismatch' || result.computedNet === null) return;
+    setBusyVoucherId(v.id);
+    try {
+      await handleUpdateVoucher(v.id, { amount: result.computedNet.toString() });
+      toast({ title: "Reconciled", description: `${v.employeeName}: ₹${Number(v.amount).toLocaleString('en-IN')} → ₹${result.computedNet.toLocaleString('en-IN')}.` });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Error", description: e.message || "Failed to update voucher." });
+    } finally {
+      setBusyVoucherId(null);
+    }
+  };
+
+  // Update every mismatched voucher in the period to its computed net.
+  const onFixAll = async () => {
+    const toFix = reconciliation.results.filter(r => r.status === 'mismatch' && r.computedNet !== null);
+    if (toFix.length === 0) return;
+    setIsReconcilingAll(true);
+    let done = 0;
+    try {
+      for (const r of toFix) {
+        await handleUpdateVoucher(r.voucherId, { amount: (r.computedNet as number).toString() });
+        done++;
+      }
+      toast({ title: "Reconciled", description: `Updated ${done} voucher${done === 1 ? '' : 's'} to the computed net.` });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Partial reconcile", description: `Updated ${done} of ${toFix.length} before an error: ${e.message || 'unknown'}.` });
+    } finally {
+      setIsReconcilingAll(false);
     }
   };
 
@@ -809,6 +862,26 @@ export function SalaryVouchers() {
                 </div>
               </CardHeader>
               <CardContent className="pt-4">
+                {reconciliation.mismatched > 0 && (
+                  <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0" />
+                    <div className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+                      <span className="font-bold">{reconciliation.mismatched}</span> voucher{reconciliation.mismatched === 1 ? '' : 's'} don&apos;t match the recalculated net
+                      {' '}(₹{reconciliation.absVariance.toLocaleString('en-IN')} total difference).
+                      {' '}Review each below, or update all to the computed amount.
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 shrink-0"
+                      onClick={onFixAll}
+                      disabled={isReconcilingAll}
+                    >
+                      <RefreshCw className={cn("w-3.5 h-3.5 mr-2", isReconcilingAll && "animate-spin")} />
+                      {isReconcilingAll ? "Updating..." : `Reconcile all (${reconciliation.mismatched})`}
+                    </Button>
+                  </div>
+                )}
                 {periodVouchers.length === 0 ? (
                   <div className="text-center py-12 text-muted-foreground flex flex-col items-center justify-center">
                     <ReceiptText className="w-8 h-8 mb-3 opacity-20" />
@@ -838,6 +911,13 @@ export function SalaryVouchers() {
                             </TableCell>
                             <TableCell className="text-right font-mono font-medium">
                               {Number(v.amount).toLocaleString('en-IN')}
+                              {reconcileById.get(v.id)?.status === 'mismatch' && (
+                                <p className="text-[10px] font-medium text-amber-600 dark:text-amber-500 mt-0.5 whitespace-nowrap">
+                                  computed ₹{reconcileById.get(v.id)!.computedNet!.toLocaleString('en-IN')}
+                                  {' '}({(reconcileById.get(v.id)!.delta as number) > 0 ? '+' : ''}
+                                  {(reconcileById.get(v.id)!.delta as number).toLocaleString('en-IN')})
+                                </p>
+                              )}
                             </TableCell>
                             <TableCell className="text-center">
                               <Badge variant="outline" className={cn(
@@ -876,6 +956,19 @@ export function SalaryVouchers() {
                                 </div>
                               ) : (
                                 <div className="flex justify-end gap-2">
+                                  {reconcileById.get(v.id)?.status === 'mismatch' && (
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="w-7 h-7 hover:bg-amber-500/10"
+                                      aria-label={`Reconcile voucher for ${v.employeeName} to the computed net`}
+                                      title={`Update to computed ₹${reconcileById.get(v.id)!.computedNet!.toLocaleString('en-IN')}`}
+                                      disabled={busyVoucherId === v.id}
+                                      onClick={() => onFixVoucher(v)}
+                                    >
+                                      <RefreshCw className={cn("w-3.5 h-3.5 text-amber-600 dark:text-amber-500", busyVoucherId === v.id && "animate-spin")} />
+                                    </Button>
+                                  )}
                                   <Button
                                     variant="ghost"
                                     size="icon"
