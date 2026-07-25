@@ -73,6 +73,90 @@ export function liveRecords<T extends Syncable>(merged: T[]): T[] {
 }
 
 /**
+ * Whether two record sets are the same sync state: same ids, each with the same
+ * updatedAt and deletedAt. Because reconcileBulk only bumps updatedAt when a
+ * record actually changed, this is a cheap "did anything change?" check.
+ *
+ * The bulk handlers use it to skip the state update when a whole-array save
+ * reconciled to no change -- which also breaks the render loop a component whose
+ * load effect re-derives its array from the exposed (always-new) live view
+ * would otherwise spin in.
+ */
+export function sameSyncState<T extends Syncable>(a: T[], b: T[]): boolean {
+  if ((a?.length ?? 0) !== (b?.length ?? 0)) return false;
+  const bById = new Map<string, T>((b ?? []).map(r => [r.id, r]));
+  for (const r of a ?? []) {
+    const o = bById.get(r.id);
+    if (!o) return false;
+    if ((r.updatedAt ?? null) !== (o.updatedAt ?? null)) return false;
+    if ((r.deletedAt ?? null) !== (o.deletedAt ?? null)) return false;
+  }
+  return true;
+}
+
+/** Shallow content equality, ignoring the sync bookkeeping fields. Records here
+ *  are flat (strings/numbers/booleans), so a shallow key-by-key compare is
+ *  enough. Order-independent. */
+function contentEqual<T extends Syncable>(a: T, b: T): boolean {
+  const keys = new Set<string>();
+  for (const k of Object.keys(a)) if (k !== 'updatedAt' && k !== 'deletedAt') keys.add(k);
+  for (const k of Object.keys(b)) if (k !== 'updatedAt' && k !== 'deletedAt') keys.add(k);
+  for (const k of keys) {
+    if ((a as any)[k] !== (b as any)[k]) return false;
+  }
+  return true;
+}
+
+/**
+ * Reconciles a bulk whole-array save into the merged model.
+ *
+ * Employees and attendance are edited by handing back the ENTIRE live array,
+ * not per-record ops. To keep tombstones and stable versions, this diffs the
+ * incoming live array against the previous full set (tombstones included):
+ *
+ *   - a record the previous set did not have  -> new, stamped `now`, live
+ *   - a live record whose content is unchanged -> keeps its old `updatedAt`, so
+ *     a whole-array save does NOT bump every row and clobber another machine's
+ *     concurrent edit to a different row
+ *   - a changed record, or one revived from a tombstone -> stamped `now`, live
+ *   - a previously-live record absent from the incoming array -> tombstoned
+ *   - an existing tombstone not re-added -> preserved
+ *
+ * `now` is passed in (not read from the clock) so the result is deterministic
+ * and testable.
+ */
+export function reconcileBulk<T extends Syncable>(
+  previous: T[],
+  incomingLive: T[],
+  now: string,
+  isEqual: (a: T, b: T) => boolean = contentEqual
+): T[] {
+  const prevById = new Map<string, T>((previous ?? []).map(r => [r.id, r]));
+  const incomingIds = new Set<string>((incomingLive ?? []).map(r => r.id));
+  const result: T[] = [];
+
+  for (const inc of incomingLive ?? []) {
+    const prev = prevById.get(inc.id);
+    if (prev && !prev.deletedAt && isEqual(prev, inc)) {
+      result.push({ ...inc, updatedAt: prev.updatedAt ?? now, deletedAt: null });
+    } else {
+      result.push({ ...inc, updatedAt: now, deletedAt: null });
+    }
+  }
+
+  for (const prev of previous ?? []) {
+    if (incomingIds.has(prev.id)) continue;   // handled above
+    if (prev.deletedAt) {
+      result.push(prev);                       // keep existing tombstone
+    } else {
+      result.push({ ...prev, deletedAt: now, updatedAt: now });  // newly removed
+    }
+  }
+
+  return result;
+}
+
+/**
  * Which merged records need writing back to remote: those remote is missing,
  * or has an older version of, or disagrees with on tombstone state. Records
  * where remote already matches are skipped so a sync is not a full re-upload.

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { mergeById, liveRecords, recordsToPush } from "@/lib/sync";
+import { mergeById, liveRecords, recordsToPush, reconcileBulk, sameSyncState } from "@/lib/sync";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/hooks/use-role";
 import { useToast } from "@/hooks/use-toast";
@@ -55,6 +55,64 @@ const rowToVoucher = (r: any) => ({
   amount: r.amount,
   paymentMethod: r.payment_method,
   remarks: r.remarks || "",
+  updatedAt: r.updated_at || null,
+  deletedAt: r.deleted_at || null,
+});
+
+const employeeToRow = (e: any, companyId: string) => ({
+  id: e.id,
+  company_id: companyId,
+  name: e.name,
+  role: e.role,
+  shift: e.shift,
+  rate: e.rate,
+  status: e.status,
+  updated_at: e.updatedAt || new Date().toISOString(),
+  deleted_at: e.deletedAt || null,
+});
+
+const rowToEmployee = (r: any) => ({
+  id: r.id,
+  name: r.name,
+  role: r.role,
+  shift: r.shift,
+  rate: r.rate,
+  status: r.status,
+  updatedAt: r.updated_at || null,
+  deletedAt: r.deleted_at || null,
+});
+
+const attendanceToRow = (a: any, companyId: string) => ({
+  id: a.id,
+  company_id: companyId,
+  employee_id: a.employeeRefId,
+  date: a.date,
+  shift: a.shift,
+  clock_in: a.clockIn,
+  clock_out: a.clockOut,
+  hours: a.hours,
+  rate: a.rate,
+  incentive: a.incentive || 0,
+  weekly_advance: a.weeklyAdvance || 0,
+  loan: a.loan || 0,
+  is_modified: a.isModified || false,
+  updated_at: a.updatedAt || new Date().toISOString(),
+  deleted_at: a.deletedAt || null,
+});
+
+const rowToAttendance = (r: any) => ({
+  id: r.id,
+  employeeRefId: r.employee_id,
+  date: r.date,
+  shift: r.shift,
+  clockIn: r.clock_in,
+  clockOut: r.clock_out,
+  hours: r.hours,
+  rate: r.rate,
+  incentive: r.incentive,
+  weeklyAdvance: r.weekly_advance,
+  loan: r.loan,
+  isModified: r.is_modified,
   updatedAt: r.updated_at || null,
   deletedAt: r.deleted_at || null,
 });
@@ -200,58 +258,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const localEmpString = localStorage.getItem(`employees_${activeId}`);
       const localEmp = localEmpString ? (JSON.parse(localEmpString) || []) : [];
       
-      if (empErr || !dbEmployees || (localEmp.length > dbEmployees.length)) {
+      if (empErr || !dbEmployees) {
         setEmployees(localEmp);
-        // Auto-repair cloud if local has more data than cloud
-        if (!empErr && dbEmployees && (localEmp.length > dbEmployees.length)) {
-           const toUpsert = localEmp.map((e: any) => ({
-              id: e.id,
-              company_id: activeId,
-              name: e.name || 'Unknown',
-              role: e.role || 'Worker',
-              shift: e.shift || '9-hour',
-              rate: e.rate || 0,
-              status: e.status || 'Active'
-            }));
-           await supabase.from('employees').upsert(toUpsert);
-        }
       } else {
-        setEmployees(dbEmployees);
-        localStorage.setItem(`employees_${activeId}`, JSON.stringify(dbEmployees));
+        const remoteEmp = dbEmployees.map(rowToEmployee);
+        const mergedEmp = mergeById(localEmp, remoteEmp);
+        setEmployees(mergedEmp);
+        localStorage.setItem(`employees_${activeId}`, JSON.stringify(mergedEmp));
+        const toPush = recordsToPush(mergedEmp, remoteEmp);
+        if (toPush.length > 0) {
+          const { error } = await supabase.from('employees').upsert(toPush.map((e: any) => employeeToRow(e, activeId)));
+          if (error) console.error("Supabase upsert employees error:", error);
+        }
       }
 
       const { data: dbAttendance, error: attErr } = await supabase.from('attendance').select('*').eq('company_id', activeId);
       const localAttString = localStorage.getItem(`attendance_${activeId}`);
       const localAtt = localAttString ? (JSON.parse(localAttString) || []) : [];
       
-      if (attErr || !dbAttendance || (localAtt.length > dbAttendance.length)) {
+      if (attErr || !dbAttendance) {
         setAttendance(localAtt);
-        // Auto-repair cloud if local has more data than cloud
-        if (!attErr && dbAttendance && (localAtt.length > dbAttendance.length)) {
-           const toUpsert = localAtt.map((a: any) => ({
-              id: a.id,
-              company_id: activeId,
-              employee_id: a.employeeRefId || a.employee_id,
-              date: (a.date && a.date.length >= 10) ? a.date.substring(0, 10) : new Date().toISOString().split('T')[0],
-              shift: a.shift || '9-hour',
-              hours: a.hours || 0,
-              rate: a.rate || 0,
-              incentive: a.incentive || 0,
-              weekly_advance: a.weeklyAdvance || 0,
-              loan: a.loan || 0,
-              is_modified: a.isModified || false
-            }));
-           await supabase.from('attendance').upsert(toUpsert);
-        }
       } else {
-        const mappedAtt = dbAttendance.map(a => ({
-          ...a,
-          employeeRefId: a.employee_id,
-          weeklyAdvance: a.weekly_advance,
-          isModified: a.is_modified
-        }));
-        setAttendance(mappedAtt);
-        localStorage.setItem(`attendance_${activeId}`, JSON.stringify(mappedAtt));
+        const remoteAtt = dbAttendance.map(rowToAttendance);
+        const mergedAtt = mergeById(localAtt, remoteAtt);
+        setAttendance(mergedAtt);
+        localStorage.setItem(`attendance_${activeId}`, JSON.stringify(mergedAtt));
+        const toPush = recordsToPush(mergedAtt, remoteAtt);
+        if (toPush.length > 0) {
+          const { error } = await supabase.from('attendance').upsert(toPush.map((a: any) => attendanceToRow(a, activeId)));
+          if (error) console.error("Supabase upsert attendance error:", error);
+        }
       }
       
       const { data: dbVouchers, error: vouchErr } = await supabase.from('vouchers').select('*').eq('company_id', activeId);
@@ -352,27 +388,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { data: dbEmployees, error: empErr } = await supabase.from('employees').select('*').eq('company_id', id);
+    const localEmpString = localStorage.getItem(`employees_${id}`);
+    const localEmp = localEmpString ? (JSON.parse(localEmpString) || []) : [];
     if (empErr || !dbEmployees) {
-      const localEmp = localStorage.getItem(`employees_${id}`);
-      setEmployees(localEmp ? JSON.parse(localEmp) : []);
+      setEmployees(localEmp);
     } else {
-      setEmployees(dbEmployees);
-      localStorage.setItem(`employees_${id}`, JSON.stringify(dbEmployees));
+      const remoteEmp = dbEmployees.map(rowToEmployee);
+      const mergedEmp = mergeById(localEmp, remoteEmp);
+      setEmployees(mergedEmp);
+      localStorage.setItem(`employees_${id}`, JSON.stringify(mergedEmp));
+      const toPush = recordsToPush(mergedEmp, remoteEmp);
+      if (toPush.length > 0) {
+        const { error } = await supabase.from('employees').upsert(toPush.map((e: any) => employeeToRow(e, id)));
+        if (error) console.error("Supabase upsert employees error:", error);
+      }
     }
 
     const { data: dbAttendance, error: attErr } = await supabase.from('attendance').select('*').eq('company_id', id);
+    const localAttString = localStorage.getItem(`attendance_${id}`);
+    const localAtt = localAttString ? (JSON.parse(localAttString) || []) : [];
     if (attErr || !dbAttendance) {
-      const localAtt = localStorage.getItem(`attendance_${id}`);
-      setAttendance(localAtt ? JSON.parse(localAtt) : []);
+      setAttendance(localAtt);
     } else {
-      const mappedAtt = dbAttendance.map(a => ({
-        ...a,
-        employeeRefId: a.employee_id,
-        weeklyAdvance: a.weekly_advance,
-        isModified: a.is_modified
-      }));
-      setAttendance(mappedAtt);
-      localStorage.setItem(`attendance_${id}`, JSON.stringify(mappedAtt));
+      const remoteAtt = dbAttendance.map(rowToAttendance);
+      const mergedAtt = mergeById(localAtt, remoteAtt);
+      setAttendance(mergedAtt);
+      localStorage.setItem(`attendance_${id}`, JSON.stringify(mergedAtt));
+      const toPush = recordsToPush(mergedAtt, remoteAtt);
+      if (toPush.length > 0) {
+        const { error } = await supabase.from('attendance').upsert(toPush.map((a: any) => attendanceToRow(a, id)));
+        if (error) console.error("Supabase upsert attendance error:", error);
+      }
     }
 
     // Vouchers were previously not reloaded on company switch, leaving the
@@ -436,35 +482,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
       return;
     }
-    setAttendance(newAttendance);
+    // The component hands back the whole LIVE array. Reconcile it against the
+    // full set in state (tombstones included): unchanged rows keep their
+    // version, changed/new rows are stamped, and rows the array dropped are
+    // tombstoned rather than hard-deleted -- so the delete propagates instead
+    // of a shorter array looking "behind" and the row being resurrected.
+    const now = new Date().toISOString();
+    const reconciled = reconcileBulk(attendance, newAttendance, now);
+    // No real change (e.g. a component's load->save round-trip): skip the update
+    // to preserve reference identity and avoid a render loop and redundant writes.
+    if (sameSyncState(reconciled, attendance)) return;
+    setAttendance(reconciled);
     if (activeCompanyId) {
-      localStorage.setItem(`attendance_${activeCompanyId}`, JSON.stringify(newAttendance));
-      
-      const currentIds = new Set(newAttendance.map(a => a.id));
-      const deletedIds = attendance.filter(a => !currentIds.has(a.id)).map(a => a.id);
-      
-      if (deletedIds.length > 0) {
-        const { error } = await supabase.from('attendance').delete().in('id', deletedIds);
-        if (error) console.error("Supabase delete attendance error:", error);
-      }
-
-      if (newAttendance.length > 0) {
-        const toUpsert = newAttendance.map(a => ({
-          id: a.id,
-          company_id: activeCompanyId,
-          employee_id: a.employeeRefId,
-          date: a.date,
-          shift: a.shift,
-          clock_in: a.clockIn,
-          clock_out: a.clockOut,
-          hours: a.hours,
-          rate: a.rate,
-          incentive: a.incentive || 0,
-          weekly_advance: a.weeklyAdvance || 0,
-          loan: a.loan || 0,
-          is_modified: a.isModified
-        }));
-        const { error } = await supabase.from('attendance').upsert(toUpsert);
+      localStorage.setItem(`attendance_${activeCompanyId}`, JSON.stringify(reconciled));
+      if (reconciled.length > 0) {
+        const { error } = await supabase.from('attendance').upsert(reconciled.map((a: any) => attendanceToRow(a, activeCompanyId)));
         if (error) console.error("Supabase upsert attendance error:", error);
       }
     }
@@ -475,29 +507,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
       return;
     }
-    setEmployees(newEmployees);
+    // Whole live array in; reconcile against the full set so drops become
+    // tombstones (see handleAttendanceChange for the rationale).
+    const now = new Date().toISOString();
+    const reconciled = reconcileBulk(employees, newEmployees, now);
+    if (sameSyncState(reconciled, employees)) return;
+    setEmployees(reconciled);
     if (activeCompanyId) {
-      localStorage.setItem(`employees_${activeCompanyId}`, JSON.stringify(newEmployees));
-      
-      const currentIds = new Set(newEmployees.map(e => e.id));
-      const deletedIds = employees.filter(e => !currentIds.has(e.id)).map(e => e.id);
-      
-      if (deletedIds.length > 0) {
-        const { error } = await supabase.from('employees').delete().in('id', deletedIds);
-        if (error) console.error("Supabase delete employees error:", error);
-      }
-
-      if (newEmployees.length > 0) {
-        const toUpsert = newEmployees.map(e => ({
-          id: e.id,
-          company_id: activeCompanyId,
-          name: e.name,
-          role: e.role,
-          shift: e.shift,
-          rate: e.rate,
-          status: e.status
-        }));
-        const { error } = await supabase.from('employees').upsert(toUpsert);
+      localStorage.setItem(`employees_${activeCompanyId}`, JSON.stringify(reconciled));
+      if (reconciled.length > 0) {
+        const { error } = await supabase.from('employees').upsert(reconciled.map((e: any) => employeeToRow(e, activeCompanyId)));
         if (error) console.error("Supabase upsert employees error:", error);
       }
     }
@@ -587,10 +606,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (error) console.error("Supabase delete voucher error:", error);
   };
 
-  /* The `vouchers` state holds the full merged set including tombstones -- the
-   * handlers and localStorage need those to keep deletions propagating. But
-   * consumers must only ever see live vouchers, so expose the filtered set,
-   * memoised for a stable identity (consumers use it in useMemo deps). */
+  /* State holds the full merged sets including tombstones -- the handlers and
+   * localStorage need those to keep deletions propagating. Consumers must only
+   * ever see live records, so expose filtered views, memoised for stable
+   * identity (consumers use them in useMemo/useEffect deps). */
+  const visibleEmployees = useMemo(() => liveRecords(employees), [employees]);
+  const visibleAttendance = useMemo(() => liveRecords(attendance), [attendance]);
   const visibleVouchers = useMemo(() => liveRecords(vouchers), [vouchers]);
 
   return (
@@ -598,8 +619,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       companies,
       activeCompanyId,
       config,
-      employees,
-      attendance,
+      employees: visibleEmployees,
+      attendance: visibleAttendance,
       vouchers: visibleVouchers,
       loading,
       setActiveCompanyId,
