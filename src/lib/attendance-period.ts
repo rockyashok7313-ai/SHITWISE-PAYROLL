@@ -44,15 +44,35 @@ export function lastDayOfMonth(year: number, month1to12: number): number {
 }
 
 /**
- * The current calendar month/year, for defaulting the attendance screen's
- * period selector (and therefore Add Attendance's date range) on load.
+ * The default payroll period the attendance screen opens to (period
+ * selector, and therefore Add Attendance's date range) -- the PREVIOUS
+ * calendar month, not the current one.
  *
- * This used to subtract one month, so opening the screen in August defaulted
- * everything to July. `now` is injectable so the "opening in a given month
- * gives that month" behaviour is actually testable, not just true by
+ * This is a confirmed arrears workflow: attendance for a month is finalised
+ * and processed the following month (e.g. opening the screen in August
+ * should default to July, the month actually being processed). An earlier
+ * version of this function defaulted to the current calendar month instead;
+ * that was reverted after direct confirmation that arrears is the correct
+ * behaviour here -- do not "fix" this back to the current month without
+ * re-confirming, the two have been swapped once already.
+ *
+ * Only the DEFAULT changes. Editing an existing entry always shows that
+ * entry's real stored date regardless of this function -- this never
+ * overrides actual data, only what a fresh screen load opens to.
+ *
+ * `now` is injectable so this is actually testable, not just true by
  * inspection.
  */
 export function currentPayrollPeriod(now: () => Date = () => new Date()): { month: string; year: string } {
   const date = now();
-  return { month: MONTHS[date.getMonth()], year: date.getFullYear().toString() };
+  // Day 1 deliberately, not date.getDate(): every month has a 1st, so this
+  // can never overflow. Subtracting the month via date.setMonth() on the
+  // ORIGINAL day instead would break on the 29th-31st -- e.g. Dec 31 minus
+  // one month lands back on Dec 1, not November, because November has only
+  // 30 days and Date silently rolls the overflow into the next month rather
+  // than clamping. new Date(year, month, 1) also correctly rolls the YEAR
+  // back for January (month index -1 normalises to December of the prior
+  // year), so no separate year-boundary check is needed either.
+  const prev = new Date(date.getFullYear(), date.getMonth() - 1, 1);
+  return { month: MONTHS[prev.getMonth()], year: prev.getFullYear().toString() };
 }

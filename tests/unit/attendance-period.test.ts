@@ -88,26 +88,44 @@ describe('lastDayOfMonth', () => {
 });
 
 describe('currentPayrollPeriod', () => {
-  it('gives the CURRENT month, not the previous one -- the reported bug', () => {
-    // Opening the attendance screen in August used to default the whole
-    // period (and Add Attendance's date range) to July.
+  // Confirmed arrears workflow: attendance for a month is processed the
+  // FOLLOWING month, so the screen should default to last month, not the
+  // current calendar one. (An earlier version of this test asserted the
+  // opposite -- current-month defaulting -- which was tried and then
+  // reverted after direct confirmation this is the intended behaviour.)
+
+  it('gives the PREVIOUS month, not the current one', () => {
     const inAugust = () => new Date(2027, 7, 15); // JS months are 0-indexed: 7 = August
-    expect(currentPayrollPeriod(inAugust)).toEqual({ month: 'August', year: '2027' });
+    expect(currentPayrollPeriod(inAugust)).toEqual({ month: 'July', year: '2027' });
   });
 
-  it('is correct at both ends of the year, where an off-by-one would roll into the wrong year', () => {
-    const inJanuary = () => new Date(2027, 0, 1);
-    expect(currentPayrollPeriod(inJanuary)).toEqual({ month: 'January', year: '2027' });
+  it('rolls back a calendar year in January -- the previous month is last December', () => {
+    const inJanuary = () => new Date(2027, 0, 15);
+    expect(currentPayrollPeriod(inJanuary)).toEqual({ month: 'December', year: '2026' });
+  });
 
+  it('does not roll the year back anywhere else', () => {
     const inDecember = () => new Date(2027, 11, 31);
-    expect(currentPayrollPeriod(inDecember)).toEqual({ month: 'December', year: '2027' });
+    expect(currentPayrollPeriod(inDecember)).toEqual({ month: 'November', year: '2027' });
   });
 
-  it('defaults to the real current date when no clock is injected', () => {
+  it('is correct on the 29th-31st, where a naive "subtract a month" overflows into the wrong month', () => {
+    // The bug this guards: date.setMonth(date.getMonth() - 1) on a day that
+    // doesn't exist in the target month rolls FORWARD past it instead of
+    // clamping. E.g. Dec 31 minus one month landed back on Dec 1, not
+    // November, because November only has 30 days.
+    expect(currentPayrollPeriod(() => new Date(2027, 0, 31))).toEqual({ month: 'December', year: '2026' }); // Jan 31 -> Dec
+    expect(currentPayrollPeriod(() => new Date(2027, 2, 31))).toEqual({ month: 'February', year: '2027' }); // Mar 31 -> Feb (28 days)
+    expect(currentPayrollPeriod(() => new Date(2028, 2, 31))).toEqual({ month: 'February', year: '2028' }); // Mar 31 -> Feb, leap year (29 days)
+    expect(currentPayrollPeriod(() => new Date(2027, 4, 31))).toEqual({ month: 'April', year: '2027' });    // May 31 -> Apr (30 days)
+  });
+
+  it('defaults to one month before the real current date when no clock is injected', () => {
     const now = new Date();
+    const expected = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     expect(currentPayrollPeriod()).toEqual({
-      month: MONTHS[now.getMonth()],
-      year: now.getFullYear().toString(),
+      month: MONTHS[expected.getMonth()],
+      year: expected.getFullYear().toString(),
     });
   });
 });
