@@ -3,12 +3,15 @@
 import { FactorySettings } from "@/components/settings/factory-settings";
 import { TeamManagement } from "@/components/settings/team-management";
 import { BackupRestorePanel } from "@/components/settings/backup-restore-panel";
+import { MoveAttendancePeriod } from "@/components/settings/move-attendance-period";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { DatabaseBackup } from "lucide-react";
+import { DatabaseBackup, ArrowRightLeft } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
+import { useRole } from "@/hooks/use-role";
 
 export default function SettingsPage() {
   const { activeCompanyId } = useAppContext();
+  const { isAdmin } = useRole(activeCompanyId);
 
   return (
     <div className="p-8 h-full overflow-y-auto space-y-6">
@@ -40,6 +43,23 @@ export default function SettingsPage() {
             <BackupRestorePanel />
           </CardContent>
         </Card>
+        {isAdmin && (
+          <Card className="bg-card/30 border-border">
+            <CardHeader>
+              <CardTitle className="font-headline flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-accent" />
+                Move Attendance Between Months
+              </CardTitle>
+              <CardDescription>
+                Correct attendance entered under the wrong month. Shows exactly what will change, and
+                downloads a fresh backup automatically, before anything is moved. Admins only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <MoveAttendancePeriod />
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
