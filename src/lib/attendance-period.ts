@@ -32,3 +32,13 @@ export function isInSelectedPeriod(entry: { date: string }, selectedMonth: strin
   const ym = entryYearMonth(entry.date);
   return !!ym && ym.month === selectedMonth && ym.year === selectedYear;
 }
+
+/**
+ * Last calendar day of a given month (1 = January), e.g. lastDayOfMonth(2027, 2) -> 28.
+ * `new Date(year, month, 0)` rolls back from day 0 of the FOLLOWING month to
+ * the last day of the target one -- handles 30 vs 31-day months and leap
+ * years for free, without a lookup table.
+ */
+export function lastDayOfMonth(year: number, month1to12: number): number {
+  return new Date(year, month1to12, 0).getDate();
+}

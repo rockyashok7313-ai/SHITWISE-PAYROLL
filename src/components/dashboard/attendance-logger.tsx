@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
-import { isInSelectedPeriod } from "@/lib/attendance-period";
+import { isInSelectedPeriod, lastDayOfMonth } from "@/lib/attendance-period";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -682,21 +682,28 @@ export function AttendanceLogger() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => {
               setEditingDialogId(null);
               const monthIndex = MONTHS.indexOf(selectedMonth);
-              const monthStr = String(monthIndex !== -1 ? monthIndex + 1 : 1).padStart(2, '0');
-              const dayStr = String(new Date().getDate()).padStart(2, '0');
-              setNewEntryDetails({ 
-                fromDate: `${selectedYear}-${monthStr}-${dayStr}`,
-                toDate: `${selectedYear}-${monthStr}-${dayStr}`,
+              const monthNum = monthIndex !== -1 ? monthIndex + 1 : 1;
+              const monthStr = String(monthNum).padStart(2, '0');
+              const yearNum = parseInt(selectedYear, 10) || new Date().getFullYear();
+              // Defaults the new entry to the full selected period
+              // (1st -> last day) instead of a single arbitrary day, so
+              // "Total Days" starts at a full month and gets edited down for
+              // partial attendance, rather than built up from one day.
+              const lastDay = lastDayOfMonth(yearNum, monthNum);
+              const lastDayStr = String(lastDay).padStart(2, '0');
+              setNewEntryDetails({
+                fromDate: `${selectedYear}-${monthStr}-01`,
+                toDate: `${selectedYear}-${monthStr}-${lastDayStr}`,
                 shift: "9-hour",
                 clockIn: "",
                 clockOut: "",
-                hours: 9,
+                hours: lastDay,
                 totalWage: "",
                 incentive: 0,
                 weeklyAdvance: 0,

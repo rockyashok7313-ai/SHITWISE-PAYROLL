@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { entryYearMonth, isInSelectedPeriod } from '../../src/lib/attendance-period';
+import { entryYearMonth, isInSelectedPeriod, lastDayOfMonth } from '../../src/lib/attendance-period';
 
 /**
  * This is the period-scoping logic that replaced the attendance logger's old
@@ -64,5 +64,25 @@ describe('isInSelectedPeriod', () => {
     const priorMonthOnly = [{ date: '2027-05-10' }, { date: '2027-05-20' }];
     const matches = priorMonthOnly.filter(e => isInSelectedPeriod(e, 'June', '2027'));
     expect(matches).toHaveLength(0);
+  });
+});
+
+describe('lastDayOfMonth', () => {
+  it('gives 31 for the 31-day months', () => {
+    for (const m of [1, 3, 5, 7, 8, 10, 12]) expect(lastDayOfMonth(2027, m)).toBe(31);
+  });
+
+  it('gives 30 for the 30-day months', () => {
+    for (const m of [4, 6, 9, 11]) expect(lastDayOfMonth(2027, m)).toBe(30);
+  });
+
+  it('gives 28 for February in a non-leap year', () => {
+    expect(lastDayOfMonth(2027, 2)).toBe(28);
+  });
+
+  it('gives 29 for February in a leap year', () => {
+    expect(lastDayOfMonth(2028, 2)).toBe(29);   // 2028 is a leap year
+    expect(lastDayOfMonth(2000, 2)).toBe(29);   // divisible by 400 -- leap
+    expect(lastDayOfMonth(1900, 2)).toBe(28);   // divisible by 100 not 400 -- not leap
   });
 });
