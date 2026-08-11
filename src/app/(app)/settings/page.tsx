@@ -2,6 +2,9 @@
 
 import { FactorySettings } from "@/components/settings/factory-settings";
 import { TeamManagement } from "@/components/settings/team-management";
+import { BackupRestorePanel } from "@/components/settings/backup-restore-panel";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { DatabaseBackup } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
 
 export default function SettingsPage() {
@@ -21,6 +24,22 @@ export default function SettingsPage() {
         {activeCompanyId && (
           <TeamManagement activeCompanyId={activeCompanyId} />
         )}
+        <Card className="bg-card/30 border-border">
+          <CardHeader>
+            <CardTitle className="font-headline flex items-center gap-2">
+              <DatabaseBackup className="w-5 h-5 text-accent" />
+              Data Backup &amp; Restore
+            </CardTitle>
+            <CardDescription>
+              This app auto-backs-up to a file in your Downloads folder as you work, independent of
+              whether the cloud database is reachable. Use these controls to trigger one manually or
+              bring an older backup back into this browser.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <BackupRestorePanel />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

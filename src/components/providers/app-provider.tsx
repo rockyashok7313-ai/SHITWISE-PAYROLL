@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { mergeById, liveRecords, recordsToPush, reconcileBulk, sameSyncState } from "@/lib/sync";
+import { shouldAutoBackup, downloadBackupNow, DEFAULT_AUTO_BACKUP_INTERVAL_MS } from "@/lib/backup";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/hooks/use-role";
 import { useToast } from "@/hooks/use-toast";
@@ -141,9 +142,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Auto-backup, throttled to at most once per DEFAULT_AUTO_BACKUP_INTERVAL_MS.
+   *
+   * Reads only localStorage -- no Supabase call, no session required. This is
+   * deliberately called BEFORE the session check in loadData below: the
+   * previous version of this backup lived after that check, so when auth
+   * failed (a paused/unreachable Supabase project, expired session, etc.) the
+   * function returned before backup code was ever reached -- the one moment a
+   * backup mattered most was the one moment it silently never ran.
+   */
+  const maybeAutoBackup = () => {
+    try {
+      if (shouldAutoBackup(window.localStorage, DEFAULT_AUTO_BACKUP_INTERVAL_MS)) {
+        downloadBackupNow(window.localStorage);
+      }
+    } catch (e) {
+      console.error("Auto backup failed", e);
+    }
+  };
+
   // Load data from Supabase
   useEffect(() => {
     const loadData = async () => {
+      // Runs unconditionally, before auth. See maybeAutoBackup's comment.
+      setTimeout(maybeAutoBackup, 1500);
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/login');
@@ -313,47 +337,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (error) console.error("Supabase upsert vouchers error:", error);
         }
       }
-      // Auto Backup Logic
-      const lastBackup = localStorage.getItem('last_auto_backup_date');
-      const today = new Date().toISOString().split('T')[0];
-      if (lastBackup !== today) {
-        setTimeout(() => {
-          try {
-            const backupData: Record<string, any> = {};
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (key && (
-                key === "companies_cache" ||
-                key === "active_company_id" ||
-                key.startsWith("employees_") ||
-                key.startsWith("attendance_") ||
-                key.startsWith("vouchers_")
-              )) {
-                try {
-                  backupData[key] = JSON.parse(localStorage.getItem(key)!);
-                } catch {
-                  backupData[key] = localStorage.getItem(key);
-                }
-              }
-            }
-            if (Object.keys(backupData).length > 0) {
-              const jsonString = JSON.stringify(backupData, null, 2);
-              const blob = new Blob([jsonString], { type: "application/json" });
-              const url = URL.createObjectURL(blob);
-              const downloadAnchor = document.createElement("a");
-              downloadAnchor.setAttribute("href", url);
-              downloadAnchor.setAttribute("download", `shiftwise_autobackup_${today}.json`);
-              document.body.appendChild(downloadAnchor);
-              downloadAnchor.click();
-              document.body.removeChild(downloadAnchor);
-              URL.revokeObjectURL(url);
-              localStorage.setItem('last_auto_backup_date', today);
-            }
-          } catch (e) {
-            console.error("Auto backup failed", e);
-          }
-        }, 5000); // Wait 5 seconds after load to not disrupt UX
-      }
+      // Second checkpoint: after a full successful sync, so the backup captures
+      // the freshest merged data rather than whatever was cached before this
+      // load if that happens to be more current. Throttled the same as the
+      // early call, so this is a no-op unless the interval has genuinely
+      // elapsed since then.
+      maybeAutoBackup();
 
       setLoading(false);
     };
@@ -495,6 +484,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAttendance(reconciled);
     if (activeCompanyId) {
       localStorage.setItem(`attendance_${activeCompanyId}`, JSON.stringify(reconciled));
+      maybeAutoBackup();
       if (reconciled.length > 0) {
         const { error } = await supabase.from('attendance').upsert(reconciled.map((a: any) => attendanceToRow(a, activeCompanyId)));
         if (error) console.error("Supabase upsert attendance error:", error);
@@ -515,6 +505,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setEmployees(reconciled);
     if (activeCompanyId) {
       localStorage.setItem(`employees_${activeCompanyId}`, JSON.stringify(reconciled));
+      maybeAutoBackup();
       if (reconciled.length > 0) {
         const { error } = await supabase.from('employees').upsert(reconciled.map((e: any) => employeeToRow(e, activeCompanyId)));
         if (error) console.error("Supabase upsert employees error:", error);
@@ -546,6 +537,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       setCompanies(updatedCompanies);
       localStorage.setItem('companies_cache', JSON.stringify(updatedCompanies));
+      maybeAutoBackup();
     }
   };
 
@@ -565,6 +557,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = [newVoucher, ...vouchers];
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+    maybeAutoBackup();
 
     const { error } = await supabase.from('vouchers').insert([voucherToRow(newVoucher, activeCompanyId)]);
     if (error) console.error("Supabase insert voucher error:", error);
@@ -580,6 +573,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = vouchers.map((v: any) => v.id === id ? { ...v, ...updates, updatedAt: now } : v);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+    maybeAutoBackup();
 
     const changed = updated.find((v: any) => v.id === id);
     if (changed) {
@@ -601,6 +595,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const updated = vouchers.map((v: any) => v.id === id ? { ...v, deletedAt: now, updatedAt: now } : v);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
+    maybeAutoBackup();
 
     const { error } = await supabase.from('vouchers').update({ deleted_at: now, updated_at: now }).eq('id', id);
     if (error) console.error("Supabase delete voucher error:", error);

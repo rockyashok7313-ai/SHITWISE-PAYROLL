@@ -12,6 +12,9 @@ import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { BackupRestorePanel } from "@/components/settings/backup-restore-panel"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import { LifeBuoy, ChevronDown } from "lucide-react"
 
 const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
@@ -19,6 +22,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [recoveryOpen, setRecoveryOpen] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -156,6 +160,38 @@ export default function LoginPage() {
         </CardFooter>
         </Stagger>
       </Card>
+      </FadeIn>
+
+      {/* Reachable WITHOUT signing in, on purpose: reads/writes only this
+          browser's localStorage via @/lib/backup, no Supabase call at all.
+          This is the one place to grab or restore your local data cache when
+          sign-in itself is broken -- e.g. the cloud database is unreachable. */}
+      <FadeIn delay={0.2} className="w-full max-w-md relative z-10 mt-4">
+        <Collapsible open={recoveryOpen} onOpenChange={setRecoveryOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-2"
+            >
+              <LifeBuoy className="w-3.5 h-3.5" />
+              Trouble signing in? Recover local data
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${recoveryOpen ? "rotate-180" : ""}`} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Card className="bg-card/60 backdrop-blur-xl border-border mt-2">
+              <CardContent className="pt-6">
+                <p className="text-xs text-muted-foreground mb-3">
+                  If the cloud database is unreachable, this doesn&apos;t block your data:
+                  anything already loaded in this browser is cached here and stays safe.
+                  These buttons work whether or not sign-in succeeds -- they only read
+                  and write this browser&apos;s local storage, nothing goes to Supabase.
+                </p>
+                <BackupRestorePanel />
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
       </FadeIn>
     </div>
   )
