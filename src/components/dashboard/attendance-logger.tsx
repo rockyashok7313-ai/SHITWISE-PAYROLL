@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
-import { isInSelectedPeriod, lastDayOfMonth } from "@/lib/attendance-period";
+import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod } from "@/lib/attendance-period";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -66,14 +66,9 @@ interface AttendanceLoggerProps {
   // Now using AppContext
 }
 
-const getDefaultPayrollPeriod = () => {
-  const date = new Date();
-  date.setMonth(date.getMonth() - 1);
-  return {
-    month: MONTHS[date.getMonth()],
-    year: date.getFullYear().toString()
-  };
-};
+// Thin wrapper so the four call sites below don't need to change.
+// See lib/attendance-period.currentPayrollPeriod for the actual logic + tests.
+const getDefaultPayrollPeriod = () => currentPayrollPeriod();
 
 import { useAppContext } from "@/components/providers/app-provider";
 

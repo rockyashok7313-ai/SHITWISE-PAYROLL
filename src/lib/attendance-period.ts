@@ -42,3 +42,17 @@ export function isInSelectedPeriod(entry: { date: string }, selectedMonth: strin
 export function lastDayOfMonth(year: number, month1to12: number): number {
   return new Date(year, month1to12, 0).getDate();
 }
+
+/**
+ * The current calendar month/year, for defaulting the attendance screen's
+ * period selector (and therefore Add Attendance's date range) on load.
+ *
+ * This used to subtract one month, so opening the screen in August defaulted
+ * everything to July. `now` is injectable so the "opening in a given month
+ * gives that month" behaviour is actually testable, not just true by
+ * inspection.
+ */
+export function currentPayrollPeriod(now: () => Date = () => new Date()): { month: string; year: string } {
+  const date = now();
+  return { month: MONTHS[date.getMonth()], year: date.getFullYear().toString() };
+}

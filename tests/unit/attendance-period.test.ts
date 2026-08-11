@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { entryYearMonth, isInSelectedPeriod, lastDayOfMonth } from '../../src/lib/attendance-period';
+import { entryYearMonth, isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod, MONTHS } from '../../src/lib/attendance-period';
 
 /**
  * This is the period-scoping logic that replaced the attendance logger's old
@@ -84,5 +84,30 @@ describe('lastDayOfMonth', () => {
     expect(lastDayOfMonth(2028, 2)).toBe(29);   // 2028 is a leap year
     expect(lastDayOfMonth(2000, 2)).toBe(29);   // divisible by 400 -- leap
     expect(lastDayOfMonth(1900, 2)).toBe(28);   // divisible by 100 not 400 -- not leap
+  });
+});
+
+describe('currentPayrollPeriod', () => {
+  it('gives the CURRENT month, not the previous one -- the reported bug', () => {
+    // Opening the attendance screen in August used to default the whole
+    // period (and Add Attendance's date range) to July.
+    const inAugust = () => new Date(2027, 7, 15); // JS months are 0-indexed: 7 = August
+    expect(currentPayrollPeriod(inAugust)).toEqual({ month: 'August', year: '2027' });
+  });
+
+  it('is correct at both ends of the year, where an off-by-one would roll into the wrong year', () => {
+    const inJanuary = () => new Date(2027, 0, 1);
+    expect(currentPayrollPeriod(inJanuary)).toEqual({ month: 'January', year: '2027' });
+
+    const inDecember = () => new Date(2027, 11, 31);
+    expect(currentPayrollPeriod(inDecember)).toEqual({ month: 'December', year: '2027' });
+  });
+
+  it('defaults to the real current date when no clock is injected', () => {
+    const now = new Date();
+    expect(currentPayrollPeriod()).toEqual({
+      month: MONTHS[now.getMonth()],
+      year: now.getFullYear().toString(),
+    });
   });
 });
