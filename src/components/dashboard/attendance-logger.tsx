@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
+import { isInSelectedPeriod } from "@/lib/attendance-period";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -107,53 +108,53 @@ export function AttendanceLogger() {
   const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-  // Load or initialize entries on mount
+  /*
+   * Load/refresh entries from context. `entries` is the FULL canonical set --
+   * every month, every year -- never scoped down to a single period. Scoping
+   * happens separately in `visibleEntries` below.
+   *
+   * This used to also rewrite every entry's `date` to force it into whatever
+   * month was currently selected, e.g. switching to June took May's real
+   * attendance rows and reassigned their date to June -- which then got
+   * pushed back to context and persisted, silently reassigning real
+   * attendance history to whichever month was last viewed. That is what made
+   * a genuinely empty month appear to have the previous month's data, and
+   * made "the previous month's attendance" show up "in the next month too".
+   * Removed entirely; only the harmless part (refreshing an entry's
+   * name/rate/role if the employee record changed) is kept.
+   */
   useEffect(() => {
-    let loadedEntries = attendance || [];
-
+    const loadedEntries = attendance || [];
     if (loadedEntries.length === 0) {
-      // User requested NOT to auto-populate everyone
-      loadedEntries = [];
-    } else {
-      // Sync loaded entries' dates with current selectedYear/selectedMonth
-      const monthIndex = MONTHS.indexOf(selectedMonth);
-      const monthStr = String(monthIndex !== -1 ? monthIndex + 1 : 1).padStart(2, '0');
-      const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
-      
-      let hasChanges = false;
-      const updatedEntries = loadedEntries.map(entry => {
-        const parts = entry.date.split('-');
-        const day = parts[2] || "01";
-        const newDate = `${selectedYear}-${monthStr}-${day}`;
-        
-        let needsUpdate = false;
-        let updated = { ...entry };
-        
-        if (entry.date !== newDate) {
-          needsUpdate = true;
-          updated.date = newDate;
-        }
-
-        const refId = entry.employeeRefId || entry.id.split('-')[0];
-        const emp = currentEmployees.find((e: Employee) => e.id === refId);
-        if (emp && (emp.rate !== entry.rate || emp.name !== entry.name || emp.role !== entry.role)) {
-          needsUpdate = true;
-          updated.rate = emp.rate;
-          updated.name = emp.name;
-          updated.role = emp.role;
-        }
-
-        if (needsUpdate) hasChanges = true;
-        return needsUpdate ? updated : entry;
-      });
-
-      if (hasChanges) {
-        loadedEntries = updatedEntries;
-      }
+      setEntries([]);
+      return;
     }
-    
-    setEntries(loadedEntries);
-  }, [attendance, employees, selectedMonth, selectedYear]);
+
+    const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
+    let hasChanges = false;
+    const refreshed = loadedEntries.map(entry => {
+      const refId = entry.employeeRefId || entry.id.split('-')[0];
+      const emp = currentEmployees.find((e: Employee) => e.id === refId);
+      if (emp && (emp.rate !== entry.rate || emp.name !== entry.name || emp.role !== entry.role)) {
+        hasChanges = true;
+        return { ...entry, rate: emp.rate, name: emp.name, role: emp.role };
+      }
+      return entry;
+    });
+
+    setEntries(hasChanges ? refreshed : loadedEntries);
+  }, [attendance, employees]);
+
+  /**
+   * The rows for the currently selected month -- what the table, exports and
+   * summary totals actually show. A month with no real attendance in it is
+   * now genuinely empty, instead of inheriting whatever was last rewritten
+   * into it.
+   */
+  const visibleEntries = useMemo(
+    () => entries.filter(e => isInSelectedPeriod(e, selectedMonth, selectedYear)),
+    [entries, selectedMonth, selectedYear]
+  );
 
   /* Paid status is derived from voucher existence, shared with the register via
    * @/lib/voucher-period -- an employee is Paid for the period when a voucher
@@ -165,7 +166,11 @@ export function AttendanceLogger() {
   );
   const isPaid = (empId: string) => paidIds.has(empId);
 
-  // Save entries to parent state on change
+  // Save entries to parent state on change. Always the FULL set (see above),
+  // matching what handleAttendanceChange expects -- it treats whatever is
+  // passed as the complete live array and tombstones anything missing from
+  // it, so pushing back a month-filtered subset would delete every other
+  // month's attendance.
   useEffect(() => {
     if (entries.length > 0) {
       onAttendanceChange(entries);
@@ -179,30 +184,10 @@ export function AttendanceLogger() {
     setDraftYear(year);
   }, [activeFinancialYear]);
 
-
-
-  // Sync entries dates when selectedMonth or selectedYear changes
-  useEffect(() => {
-    if (entries.length === 0) return;
-    const monthIndex = MONTHS.indexOf(selectedMonth);
-    const monthStr = String(monthIndex !== -1 ? monthIndex + 1 : 1).padStart(2, '0');
-    
-    setEntries(prev => prev.map(entry => {
-      const parts = entry.date.split('-');
-      const day = parts[2] || "01";
-      const newDate = `${selectedYear}-${monthStr}-${day}`;
-      if (entry.date !== newDate) {
-        return { ...entry, date: newDate };
-      }
-      return entry;
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, selectedYear]);
-
   const handleExportCSV = () => {
     try {
       let csvContent = "Date,Staff ID,Name,Role,Shift,Days,Rate (per hr),Per Day Salary,Incentive,Weekly Advance,Loan,Roundoff,Net Payout\n";
-      entries.forEach(entry => {
+      visibleEntries.forEach(entry => {
         const shiftHrs = entry.shift === '12-hour' ? 12 : 9;
         const grossWage = entry.hours * (entry.rate * shiftHrs);
         const rawNet = grossWage + entry.incentive - entry.weeklyAdvance - entry.loan;
@@ -216,7 +201,7 @@ export function AttendanceLogger() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      const logDate = entries[0]?.date || new Date().toISOString().split('T')[0];
+      const logDate = visibleEntries[0]?.date || new Date().toISOString().split('T')[0];
       link.setAttribute("download", `Daily_Attendance_Report_${logDate}.csv`);
       document.body.appendChild(link);
       link.click();
@@ -242,9 +227,9 @@ export function AttendanceLogger() {
     try {
       const { jsPDF } = await import("jspdf");
       
-      let exportEntries = entries;
+      let exportEntries = visibleEntries;
       if (statusFilter) {
-         exportEntries = entries.filter(e => {
+         exportEntries = visibleEntries.filter(e => {
             const empId = e.employeeRefId || e.id.split('-')[0];
             const status = isPaid(empId) ? 'Paid' : 'Unpaid';
             return status === statusFilter;
@@ -504,15 +489,18 @@ export function AttendanceLogger() {
   };
 
   const applyBulkSettings = () => {
-    setEntries(prev => prev.map(entry => ({
-      ...entry,
-      shift: bulkShift,
-      hours: bulkShift === '12-hour' ? 12 : 9,
-      isModified: true
-    })));
+    // Scoped to the currently viewed month's rows only. entries is the whole
+    // historical set, so applying unconditionally would silently overwrite
+    // shift data in every month ever recorded, not just this one.
+    const visibleIds = new Set(visibleEntries.map(e => e.id));
+    setEntries(prev => prev.map(entry =>
+      visibleIds.has(entry.id)
+        ? { ...entry, shift: bulkShift, hours: bulkShift === '12-hour' ? 12 : 9, isModified: true }
+        : entry
+    ));
     toast({
       title: "Bulk Shift Applied",
-      description: `Updated all staff to ${bulkShift} shift settings.`,
+      description: `Updated all staff to ${bulkShift} shift settings for ${selectedMonth} ${selectedYear}.`,
     });
   };
 
@@ -603,7 +591,7 @@ export function AttendanceLogger() {
   const handleFinalize = () => {
     toast({
       title: "Logs Finalized",
-      description: `Processed payroll entries for ${entries.length} staff members for ${selectedMonth} ${selectedYear}.`,
+      description: `Processed payroll entries for ${visibleEntries.length} staff members for ${selectedMonth} ${selectedYear}.`,
     });
   };
 
@@ -807,7 +795,14 @@ export function AttendanceLogger() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries
+            {visibleEntries.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={13} className="text-center py-12 text-muted-foreground">
+                  No attendance logged for {selectedMonth} {selectedYear} yet. Click &quot;Add Attendance&quot; to start.
+                </TableCell>
+              </TableRow>
+            )}
+            {visibleEntries
               .filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.id.toLowerCase().includes(searchQuery.toLowerCase()))
               .map((entry) => {
               const shiftHrs = entry.shift === '12-hour' ? 12 : 9;
@@ -1091,7 +1086,7 @@ export function AttendanceLogger() {
           <div className="flex flex-col">
             <span className="text-[10px] text-primary uppercase font-bold tracking-widest">Net Liability ({selectedMonth})</span>
             <span className="text-2xl font-headline font-black text-foreground">
-              ₹{entries.reduce((acc, curr) => {
+              ₹{visibleEntries.reduce((acc, curr) => {
                 const shiftHrs = curr.shift === '12-hour' ? 12 : 9;
                 return acc + Math.round(curr.hours * (curr.rate * shiftHrs) + curr.incentive - curr.weeklyAdvance - curr.loan);
               }, 0).toLocaleString('en-IN')}
@@ -1103,7 +1098,7 @@ export function AttendanceLogger() {
           <div className="flex flex-col">
             <span className="text-[10px] text-green-500 uppercase font-bold tracking-widest">Total Incentives</span>
             <span className="text-2xl font-headline font-black text-foreground">
-              ₹{entries.reduce((acc, curr) => acc + curr.incentive, 0).toLocaleString('en-IN')}
+              ₹{visibleEntries.reduce((acc, curr) => acc + curr.incentive, 0).toLocaleString('en-IN')}
             </span>
           </div>
           <Coins className="w-8 h-8 text-green-500/30" />
@@ -1112,7 +1107,7 @@ export function AttendanceLogger() {
           <div className="flex flex-col">
             <span className="text-[10px] text-destructive uppercase font-bold tracking-widest">Total Deductions</span>
             <span className="text-2xl font-headline font-black text-foreground">
-              ₹{entries.reduce((acc, curr) => acc + curr.weeklyAdvance + curr.loan, 0).toLocaleString('en-IN')}
+              ₹{visibleEntries.reduce((acc, curr) => acc + curr.weeklyAdvance + curr.loan, 0).toLocaleString('en-IN')}
             </span>
           </div>
           <Wallet className="w-8 h-8 text-destructive/30" />
