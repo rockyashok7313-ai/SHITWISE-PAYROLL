@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SaveIndicator } from "@/components/ui/save-indicator";
+import { CompanySwitcher } from "@/components/layout/company-switcher";
 import { supabase } from "@/lib/supabase";
 
 /* NOTE: this file used to import SidebarNav from @/components/layout/sidebar-nav
@@ -95,8 +96,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 </p>
               </div>
             </div>
+
+            {/* Which company's data you are looking at. Previously unreachable
+                from the UI, which is how the app ended up sitting on an empty
+                company while the real data lived in another one. */}
+            <div className="mt-4">
+              <CompanySwitcher />
+            </div>
           </div>
-          
+
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
             {items.map((item) => (
               <Link 
