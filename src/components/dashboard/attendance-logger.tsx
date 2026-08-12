@@ -1,9 +1,9 @@
 
 "use client"
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
-import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod } from "@/lib/attendance-period";
+import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod, entryYearMonth } from "@/lib/attendance-period";
 import { defaultShiftForEmployee } from "@/lib/shift-rules";
 import { calculateEntryBreakdown } from "@/lib/payroll";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -102,6 +102,9 @@ export function AttendanceLogger() {
     loan: 0,
   });
   const [entries, setEntries] = useState<AttendanceRecord[]>([]);
+  /** The last list received FROM the provider, compared by reference so the
+   *  save effect never pushes back a list it did not originate. */
+  const lastFromProvider = useRef<AttendanceRecord[]>([]);
   const [bulkShift, setBulkShift] = useState<'9-hour' | '12-hour'>('12-hour');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
@@ -123,6 +126,7 @@ export function AttendanceLogger() {
   useEffect(() => {
     const loadedEntries = attendance || [];
     if (loadedEntries.length === 0) {
+      lastFromProvider.current = loadedEntries;
       setEntries([]);
       return;
     }
@@ -139,7 +143,11 @@ export function AttendanceLogger() {
       return entry;
     });
 
-    setEntries(hasChanges ? refreshed : loadedEntries);
+    const next = hasChanges ? refreshed : loadedEntries;
+    // Record what came FROM the provider so the save effect below can tell a
+    // real local edit apart from this component echoing the list back.
+    lastFromProvider.current = next;
+    setEntries(next);
   }, [attendance, employees]);
 
   /**
@@ -168,11 +176,24 @@ export function AttendanceLogger() {
   // passed as the complete live array and tombstones anything missing from
   // it, so pushing back a month-filtered subset would delete every other
   // month's attendance.
+  //
+  // DATA-LOSS BUG THIS FIXES: `onAttendanceChange` was in this dependency
+  // array. It comes from AppContext and is re-created on every provider
+  // render, so this effect re-fired constantly and pushed whatever `entries`
+  // happened to hold at the time. When that value was stale -- which it is
+  // for a render or two after the provider delivers a new list --
+  // handleAttendanceChange reconciled it as a whole-array save and
+  // TOMBSTONED every record missing from it. Observed live: 79 restored July
+  // records soft-deleted within minutes of being written.
+  //
+  // Depending only on `entries`, plus the ref check below, means this runs
+  // for genuine local edits and never for a list the provider just supplied.
   useEffect(() => {
-    if (entries.length > 0) {
-      onAttendanceChange(entries);
-    }
-  }, [entries, onAttendanceChange]);
+    if (entries === lastFromProvider.current) return;
+    if (entries.length === 0) return;
+    onAttendanceChange(entries);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
 
   // Sync selectedYear when activeFinancialYear prop changes
   useEffect(() => {
@@ -569,18 +590,31 @@ export function AttendanceLogger() {
       ? newEntryDetails.fromDate 
       : `${newEntryDetails.fromDate} to ${newEntryDetails.toDate}`;
 
-    const isDuplicate = entries.some(entry => {
+    /* Duplicate check by MONTH, not by exact date string.
+     *
+     * Attendance here is one record per labourer per month (the `hours` field
+     * is a day count for the whole period), so a second record for the same
+     * month double-counts that person's pay. The old check compared
+     * `entry.date === dateStr` exactly, which let obvious duplicates through:
+     * "2026-07-01 to 2026-07-31" and "2026-07-15" are different strings but
+     * both are July for the same worker, and both would be paid. */
+    const newPeriod = entryYearMonth(dateStr);
+    const clash = entries.find(entry => {
       const isSameEmployee = (entry.employeeRefId || entry.id.split('-')[0]) === emp.id;
-      const isSameDate = entry.date === dateStr;
-      const isDifferentEntry = editingDialogId ? entry.id !== editingDialogId : true;
-      return isSameEmployee && isSameDate && isDifferentEntry;
+      if (!isSameEmployee) return false;
+      if (editingDialogId && entry.id === editingDialogId) return false; // editing itself
+      const existing = entryYearMonth(entry.date);
+      // Fall back to exact-string comparison if either date is unparseable,
+      // so a malformed entry still blocks its own exact duplicate.
+      if (!newPeriod || !existing) return entry.date === dateStr;
+      return existing.month === newPeriod.month && existing.year === newPeriod.year;
     });
 
-    if (isDuplicate) {
+    if (clash) {
       toast({
         variant: "destructive",
-        title: "Duplicate Entry Detected",
-        description: `${emp.name} already has a log for ${dateStr}.`,
+        title: "Duplicate Entry Blocked",
+        description: `${emp.name} already has an attendance record for ${newPeriod ? `${newPeriod.month} ${newPeriod.year}` : dateStr} (${clash.date}). Edit that entry instead of adding a second one — two records for the same month would pay them twice.`,
       });
       return;
     }
