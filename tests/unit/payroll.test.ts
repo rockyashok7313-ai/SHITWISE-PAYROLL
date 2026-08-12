@@ -12,7 +12,11 @@ import {
   isInPeriod,
   filterAttendanceForPeriod,
   yearForMonth,
-  yearOptions
+  yearOptions,
+  perDaySalary,
+  monthlySalary,
+  rateFromMonthlySalary,
+  MONTHLY_WORKING_DAYS
 } from '../../src/lib/payroll';
 
 /**
@@ -440,5 +444,44 @@ describe('MONTHS', () => {
     expect(MONTHS[0]).toBe('January');
     expect(MONTHS[11]).toBe('December');
     expect(MONTHS.indexOf('May') + 1).toBe(5);
+  });
+});
+
+describe('salary conversions (hourly <-> per-day <-> monthly)', () => {
+  it('per-day is the hourly rate times the shift hours', () => {
+    expect(perDaySalary(300, '12-hour')).toBe(3600);
+    expect(perDaySalary(300, '9-hour')).toBe(2700);
+  });
+
+  it('monthly is per-day times the standard working days', () => {
+    // The screenshot case: Rs300/hr on a 12-hour shift.
+    expect(MONTHLY_WORKING_DAYS).toBe(26);
+    expect(monthlySalary(300, '12-hour')).toBe(93600); // 3600 * 26
+    expect(monthlySalary(300, '9-hour')).toBe(70200);  // 2700 * 26
+  });
+
+  it('round-trips: entering a monthly salary yields a rate that reproduces it', () => {
+    // This is what makes the field two-way and trustworthy.
+    for (const shift of ['9-hour', '12-hour']) {
+      const rate = rateFromMonthlySalary(93600, shift);
+      expect(monthlySalary(rate, shift)).toBeCloseTo(93600, 6);
+    }
+  });
+
+  it('accepts numeric strings straight from the form input', () => {
+    expect(perDaySalary('300', '12-hour')).toBe(3600);
+    expect(monthlySalary('300', '12-hour')).toBe(93600);
+    expect(rateFromMonthlySalary('93600', '12-hour')).toBe(300);
+  });
+
+  it('treats blank or unusable input as zero rather than NaN', () => {
+    expect(perDaySalary('', '12-hour')).toBe(0);
+    expect(monthlySalary(undefined as any, '12-hour')).toBe(0);
+    expect(rateFromMonthlySalary('abc', '12-hour')).toBe(0);
+  });
+
+  it('defaults to the 9-hour shift when none is given, like the rest of payroll', () => {
+    expect(perDaySalary(100)).toBe(900);
+    expect(monthlySalary(100)).toBe(23400);
   });
 });

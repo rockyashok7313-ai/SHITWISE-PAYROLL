@@ -86,6 +86,44 @@ export function shiftHoursFor(shift?: string): number {
 }
 
 /**
+ * Working days in a month, for converting between hourly/daily/monthly pay.
+ *
+ * 26 = a six-day working week, the existing convention in this codebase --
+ * it was already hardcoded in the bonus calculator, the payroll register and
+ * the employee form. Defined here once so those cannot drift apart; a change
+ * to the working week is a single edit.
+ */
+export const MONTHLY_WORKING_DAYS = 26;
+
+/** A full day's pay: hourly rate x the shift's hours. */
+export function perDaySalary(rate: number | string, shift?: string): number {
+  return (Number(rate) || 0) * shiftHoursFor(shift);
+}
+
+/** A full month's pay at the standard working week. */
+export function monthlySalary(
+  rate: number | string,
+  shift?: string,
+  workingDays: number = MONTHLY_WORKING_DAYS
+): number {
+  return perDaySalary(rate, shift) * workingDays;
+}
+
+/**
+ * The inverse: the hourly rate implied by a monthly salary. Lets the employee
+ * form be entered from whichever figure the user actually knows -- many
+ * factory owners negotiate monthly, not hourly.
+ */
+export function rateFromMonthlySalary(
+  monthly: number | string,
+  shift?: string,
+  workingDays: number = MONTHLY_WORKING_DAYS
+): number {
+  const divisor = shiftHoursFor(shift) * workingDays;
+  return divisor > 0 ? (Number(monthly) || 0) / divisor : 0;
+}
+
+/**
  * Full breakdown for one attendance entry.
  *
  * FALLBACK RULES -- the register and the voucher disagreed on both of these,

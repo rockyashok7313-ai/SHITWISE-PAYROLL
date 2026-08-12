@@ -45,6 +45,7 @@ interface EmployeeProfilesProps {
 }
 import { useAppContext } from "@/components/providers/app-provider";
 import { useRole } from "@/hooks/use-role";
+import { perDaySalary, monthlySalary, rateFromMonthlySalary, MONTHLY_WORKING_DAYS } from "@/lib/payroll";
 
 export function EmployeeProfiles() {
   const { activeCompanyId, employees: propEmployees, handleEmployeesChange: onEmployeesChange } = useAppContext();
@@ -313,10 +314,10 @@ export function EmployeeProfiles() {
                     <Label className="text-left text-xs">Per Day Salary</Label>
                     <div className="col-span-3 relative">
                       <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                      <Input 
+                      <Input
                         type="number"
                         step="any"
-                        value={Number((newEmployee.rate * (newEmployee.shift === '12-hour' ? 12 : 9)).toFixed(2))} 
+                        value={Number(perDaySalary(newEmployee.rate, newEmployee.shift).toFixed(2))}
                         onChange={(e) => {
                           const val = Number(e.target.value);
                           const shiftHrs = newEmployee.shift === '12-hour' ? 12 : 9;
@@ -324,6 +325,31 @@ export function EmployeeProfiles() {
                         }}
                         className="pl-8 bg-background border-muted font-mono text-primary font-bold"
                       />
+                    </div>
+                  </div>
+                  {/* Monthly figure, two-way like Per Day Salary above -- many
+                      wages here are negotiated monthly, so entering it derives
+                      the hourly rate rather than forcing the user to do the
+                      arithmetic. */}
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <Label className="text-left text-xs">Monthly Salary</Label>
+                    <div className="col-span-3 relative">
+                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        step="any"
+                        value={Number(monthlySalary(newEmployee.rate, newEmployee.shift).toFixed(2))}
+                        onChange={(e) => {
+                          setNewEmployee({
+                            ...newEmployee,
+                            rate: rateFromMonthlySalary(e.target.value, newEmployee.shift),
+                          });
+                        }}
+                        className="pl-8 bg-background border-muted font-mono text-primary font-bold"
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {MONTHLY_WORKING_DAYS} working days &times; per-day salary
+                      </p>
                     </div>
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
@@ -419,7 +445,7 @@ export function EmployeeProfiles() {
                   <TableHead>Shift</TableHead>
                   <TableHead>Per Hour</TableHead>
                   <TableHead>Per Day</TableHead>
-                  <TableHead>Monthly (26d)</TableHead>
+                  <TableHead>Monthly ({MONTHLY_WORKING_DAYS}d)</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -429,9 +455,8 @@ export function EmployeeProfiles() {
                   emp.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                   emp.role.toLowerCase().includes(searchQuery.toLowerCase())
                 ).map((emp) => {
-                  const hours = emp.shift === '12-hour' ? 12 : 9;
-                  const perDay = emp.rate * hours;
-                  const monthly = perDay * 26;
+                  const perDay = perDaySalary(emp.rate, emp.shift);
+                  const monthly = monthlySalary(emp.rate, emp.shift);
                   
                   return (
                     <TableRow key={emp.id} className="border-border hover:bg-muted/10">
@@ -643,13 +668,35 @@ export function EmployeeProfiles() {
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label className="text-left text-xs">Monthly Salary</Label>
+                                    <div className="col-span-3 relative">
+                                      <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                                      <Input
+                                        type="number"
+                                        step="any"
+                                        value={editingEmployee ? Number(monthlySalary(editingEmployee.rate, editingEmployee.shift).toFixed(2)) : 0}
+                                        onChange={(e) => {
+                                          if (!editingEmployee) return;
+                                          setEditingEmployee({
+                                            ...editingEmployee,
+                                            rate: rateFromMonthlySalary(e.target.value, editingEmployee.shift),
+                                          });
+                                        }}
+                                        className="pl-8 bg-background border-muted font-mono text-primary font-bold"
+                                      />
+                                      <p className="text-[10px] text-muted-foreground mt-1">
+                                        {MONTHLY_WORKING_DAYS} working days &times; per-day salary
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-4 items-center gap-4">
                                     <Label className="text-left text-xs">Per Day Salary</Label>
                                     <div className="col-span-3 relative">
                                       <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                                      <Input 
+                                      <Input
                                         type="number"
                                         step="any"
-                                        value={editingEmployee ? Number((editingEmployee.rate * (editingEmployee.shift === '12-hour' ? 12 : 9)).toFixed(2)) : 0} 
+                                        value={editingEmployee ? Number(perDaySalary(editingEmployee.rate, editingEmployee.shift).toFixed(2)) : 0}
                                         onChange={(e) => {
                                           if (!editingEmployee) return;
                                           const val = Number(e.target.value);
