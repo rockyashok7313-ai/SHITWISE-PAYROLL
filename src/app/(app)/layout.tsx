@@ -8,6 +8,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { SaveIndicator } from "@/components/ui/save-indicator";
 import { supabase } from "@/lib/supabase";
 
 /* NOTE: this file used to import SidebarNav from @/components/layout/sidebar-nav
@@ -135,6 +136,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 relative overflow-hidden bg-background">
           {children}
         </main>
+
+        {/* Global save feedback for every mutation in the app. */}
+        <SaveIndicator />
       </div>
     </AppProvider>
   );

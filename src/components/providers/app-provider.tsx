@@ -1,12 +1,15 @@
 "use client"
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { mergeById, liveRecords, recordsToPush, reconcileBulk, sameSyncState } from "@/lib/sync";
 import { shouldAutoBackup, downloadBackupNow, DEFAULT_AUTO_BACKUP_INTERVAL_MS } from "@/lib/backup";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/hooks/use-role";
 import { useToast } from "@/hooks/use-toast";
+
+/** Lifecycle of a save, for the global save indicator. */
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 interface AppContextType {
   companies: any[];
@@ -16,6 +19,7 @@ interface AppContextType {
   attendance: any[];
   vouchers: any[];
   loading: boolean;
+  saveStatus: SaveStatus;
   setActiveCompanyId: (id: string) => void;
   handleCreateCompany: (details: { name: string; unit: string; financialYear: string }) => Promise<void>;
   handleAttendanceChange: (newAttendance: any[]) => Promise<void>;
@@ -60,6 +64,11 @@ const rowToVoucher = (r: any) => ({
   deletedAt: r.deleted_at || null,
 });
 
+/* The profile fields below (gender, mobile, bank details, photo) were
+ * collected by the Employee Profiles form but omitted from these mappers, so
+ * they were silently dropped on every sync and lost on reload from cloud.
+ * gender is now load-bearing -- Add Attendance derives the default shift from
+ * it -- so it has to round-trip. Requires migration 0004. */
 const employeeToRow = (e: any, companyId: string) => ({
   id: e.id,
   company_id: companyId,
@@ -68,6 +77,12 @@ const employeeToRow = (e: any, companyId: string) => ({
   shift: e.shift,
   rate: e.rate,
   status: e.status,
+  gender: e.gender || null,
+  mobile: e.mobile || null,
+  bank_name: e.bankName || null,
+  account_number: e.accountNumber || null,
+  ifsc_code: e.ifscCode || null,
+  photo_url: e.photoUrl || null,
   updated_at: e.updatedAt || new Date().toISOString(),
   deleted_at: e.deletedAt || null,
 });
@@ -79,6 +94,12 @@ const rowToEmployee = (r: any) => ({
   shift: r.shift,
   rate: r.rate,
   status: r.status,
+  gender: r.gender || "",
+  mobile: r.mobile || "",
+  bankName: r.bank_name || "",
+  accountNumber: r.account_number || "",
+  ifscCode: r.ifsc_code || "",
+  photoUrl: r.photo_url || "",
   updatedAt: r.updated_at || null,
   deletedAt: r.deleted_at || null,
 });
@@ -141,6 +162,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [vouchers, setVouchers] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
+
+  /* Global save feedback. Every mutation handler below reports through
+   * markSaving/markSaved/markSaveError, so the indicator is consistent across
+   * attendance, employees, vouchers and settings rather than each screen
+   * inventing its own. */
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const saveResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearSaveTimer = () => {
+    if (saveResetTimer.current) {
+      clearTimeout(saveResetTimer.current);
+      saveResetTimer.current = null;
+    }
+  };
+
+  const markSaving = () => { clearSaveTimer(); setSaveStatus('saving'); };
+
+  const settleSave = (status: 'saved' | 'error') => {
+    clearSaveTimer();
+    setSaveStatus(status);
+    // Errors linger longer -- they are worth reading before they disappear.
+    saveResetTimer.current = setTimeout(() => setSaveStatus('idle'), status === 'saved' ? 1800 : 5000);
+  };
+
+  const markSaved = () => settleSave('saved');
+  const markSaveError = () => settleSave('error');
+
+  // Don't leave a timer running after unmount.
+  useEffect(() => clearSaveTimer, []);
 
   /**
    * Auto-backup, throttled to at most once per DEFAULT_AUTO_BACKUP_INTERVAL_MS.
@@ -483,12 +533,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (sameSyncState(reconciled, attendance)) return;
     setAttendance(reconciled);
     if (activeCompanyId) {
+      markSaving();
       localStorage.setItem(`attendance_${activeCompanyId}`, JSON.stringify(reconciled));
       maybeAutoBackup();
       if (reconciled.length > 0) {
         const { error } = await supabase.from('attendance').upsert(reconciled.map((a: any) => attendanceToRow(a, activeCompanyId)));
-        if (error) console.error("Supabase upsert attendance error:", error);
+        if (error) { console.error("Supabase upsert attendance error:", error); markSaveError(); return; }
       }
+      markSaved();
     }
   };
 
@@ -504,12 +556,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (sameSyncState(reconciled, employees)) return;
     setEmployees(reconciled);
     if (activeCompanyId) {
+      markSaving();
       localStorage.setItem(`employees_${activeCompanyId}`, JSON.stringify(reconciled));
       maybeAutoBackup();
       if (reconciled.length > 0) {
         const { error } = await supabase.from('employees').upsert(reconciled.map((e: any) => employeeToRow(e, activeCompanyId)));
-        if (error) console.error("Supabase upsert employees error:", error);
+        if (error) { console.error("Supabase upsert employees error:", error); markSaveError(); return; }
       }
+      markSaved();
     }
   };
 
@@ -520,6 +574,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     setConfig(newConfig);
     if (activeCompanyId) {
+      markSaving();
       await supabase.from('companies').update({
         name: newConfig.companyName,
         unit: newConfig.factoryUnit,
@@ -538,6 +593,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setCompanies(updatedCompanies);
       localStorage.setItem('companies_cache', JSON.stringify(updatedCompanies));
       maybeAutoBackup();
+      markSaved();
     }
   };
 
@@ -559,8 +615,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
     maybeAutoBackup();
 
+    markSaving();
     const { error } = await supabase.from('vouchers').insert([voucherToRow(newVoucher, activeCompanyId)]);
-    if (error) console.error("Supabase insert voucher error:", error);
+    if (error) { console.error("Supabase insert voucher error:", error); markSaveError(); return; }
+    markSaved();
   };
 
   const handleUpdateVoucher = async (id: string, updates: any) => {
@@ -577,8 +635,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const changed = updated.find((v: any) => v.id === id);
     if (changed) {
+      markSaving();
       const { error } = await supabase.from('vouchers').update(voucherToRow(changed, activeCompanyId)).eq('id', id);
-      if (error) console.error("Supabase update voucher error:", error);
+      if (error) { console.error("Supabase update voucher error:", error); markSaveError(); return; }
+      markSaved();
     }
   };
 
@@ -597,8 +657,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
     maybeAutoBackup();
 
+    markSaving();
     const { error } = await supabase.from('vouchers').update({ deleted_at: now, updated_at: now }).eq('id', id);
-    if (error) console.error("Supabase delete voucher error:", error);
+    if (error) { console.error("Supabase delete voucher error:", error); markSaveError(); return; }
+    markSaved();
   };
 
   /* State holds the full merged sets including tombstones -- the handlers and
@@ -618,6 +680,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       attendance: visibleAttendance,
       vouchers: visibleVouchers,
       loading,
+      saveStatus,
       setActiveCompanyId,
       handleCreateCompany,
       handleAttendanceChange,

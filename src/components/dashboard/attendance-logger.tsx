@@ -4,6 +4,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
 import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod } from "@/lib/attendance-period";
+import { defaultShiftForEmployee } from "@/lib/shift-rules";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -510,6 +511,27 @@ export function AttendanceLogger() {
       description: `${deletedName} has been removed from the current log.`,
     });
   };
+
+  /**
+   * Picking a labourer re-derives the shift from their gender (male ->
+   * 12-hour, female -> 9-hour; see lib/shift-rules for the fallbacks).
+   *
+   * Only the shift is set -- `hours` is the DAY COUNT for the selected date
+   * range, not clock hours, so it is deliberately left alone here. Changing
+   * the shift dropdown by hand still works exactly as before; this is a
+   * starting value, not a lock.
+   */
+  const handleSelectEmployeeForEntry = (empId: string) => {
+    setNewEntryEmployeeId(empId);
+    const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
+    const emp = roster.find((e: any) => e.id === empId);
+    if (!emp) return;
+    setNewEntryDetails(p => ({ ...p, shift: defaultShiftForEmployee(emp as any) }));
+  };
+
+  /** The employee currently chosen in the dialog, for the auto-shift hint. */
+  const selectedDialogEmployee = (employees && employees.length > 0 ? employees : EMPLOYEES)
+    .find((e: any) => e.id === newEntryEmployeeId) as any;
 
   const handleAddAttendance = () => {
     if (!newEntryEmployeeId) return;
@@ -1130,19 +1152,20 @@ export function AttendanceLogger() {
                 onChange={(e) => setDialogSearchQuery(e.target.value)}
                 className="mb-1 bg-background border-muted focus-visible:ring-accent"
               />
-              <Select value={newEntryEmployeeId} onValueChange={setNewEntryEmployeeId}>
+              <Select value={newEntryEmployeeId} onValueChange={handleSelectEmployeeForEntry}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select an employee..." />
                 </SelectTrigger>
                 <SelectContent>
                   {(employees && employees.length > 0 ? employees : EMPLOYEES)
-                    .filter((emp: any) => 
-                      emp.name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) || 
+                    .filter((emp: any) =>
+                      emp.name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
                       emp.role.toLowerCase().includes(dialogSearchQuery.toLowerCase())
                     )
                     .map((emp: any) => (
                       <SelectItem key={emp.id} value={emp.id}>
                         {emp.name} ({emp.role})
+                        {emp.gender ? <span className="text-muted-foreground"> &middot; {emp.gender}</span> : null}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -1214,8 +1237,18 @@ export function AttendanceLogger() {
                     <SelectItem value="12-hour">12-hour</SelectItem>
                   </SelectContent>
                 </Select>
+                {/* Makes the auto-selection visible instead of the shift
+                    appearing to change on its own. Still fully overridable. */}
+                {selectedDialogEmployee?.gender &&
+                  ['male', 'female'].includes(String(selectedDialogEmployee.gender).toLowerCase()) && (
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    Auto-set from{' '}
+                    <span className="font-semibold capitalize">{selectedDialogEmployee.gender}</span>
+                    {' '}&mdash; you can change it.
+                  </p>
+                )}
               </div>
-              
+
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold">Clock In</label>
                 <Input 
