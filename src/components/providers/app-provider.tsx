@@ -27,6 +27,8 @@ interface AppContextType {
   vouchers: any[];
   loading: boolean;
   saveStatus: SaveStatus;
+  /** Why the last cloud save failed, if it did. */
+  saveError: string | null;
   setActiveCompanyId: (id: string) => void;
   handleCreateCompany: (details: { name: string; unit: string; financialYear: string }) => Promise<void>;
   handleAttendanceChange: (newAttendance: any[]) => Promise<void>;
@@ -175,6 +177,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
    * attendance, employees, vouchers and settings rather than each screen
    * inventing its own. */
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  /* The reason a cloud save failed, surfaced in the indicator. Without this a
+   * failure is just "sync failed" and diagnosing it means digging through the
+   * browser console -- which is how a missing clock_in/clock_out column went
+   * unnoticed while every attendance save silently failed. */
+  const [saveError, setSaveError] = useState<string | null>(null);
   const saveResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearSaveTimer = () => {
@@ -184,7 +191,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const markSaving = () => { clearSaveTimer(); setSaveStatus('saving'); };
+  const markSaving = () => { clearSaveTimer(); setSaveError(null); setSaveStatus('saving'); };
 
   const settleSave = (status: 'saved' | 'error') => {
     clearSaveTimer();
@@ -194,7 +201,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const markSaved = () => settleSave('saved');
-  const markSaveError = () => settleSave('error');
+  const markSaveError = (err?: { message?: string } | null) => {
+    setSaveError(err?.message ?? null);
+    settleSave('error');
+  };
 
   /**
    * Writes audit rows, fire-and-forget.
@@ -582,7 +592,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       maybeAutoBackup();
       if (reconciled.length > 0) {
         const { error } = await supabase.from('attendance').upsert(reconciled.map((a: any) => attendanceToRow(a, activeCompanyId)));
-        if (error) { console.error("Supabase upsert attendance error:", error); markSaveError(); return; }
+        if (error) { console.error("Supabase upsert attendance error:", error); markSaveError(error); return; }
       }
       markSaved();
     }
@@ -609,7 +619,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       maybeAutoBackup();
       if (reconciled.length > 0) {
         const { error } = await supabase.from('employees').upsert(reconciled.map((e: any) => employeeToRow(e, activeCompanyId)));
-        if (error) { console.error("Supabase upsert employees error:", error); markSaveError(); return; }
+        if (error) { console.error("Supabase upsert employees error:", error); markSaveError(error); return; }
       }
       markSaved();
 
@@ -670,7 +680,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     markSaving();
     const { error } = await supabase.from('vouchers').insert([voucherToRow(newVoucher, activeCompanyId)]);
-    if (error) { console.error("Supabase insert voucher error:", error); markSaveError(); return; }
+    if (error) { console.error("Supabase insert voucher error:", error); markSaveError(error); return; }
     markSaved();
   };
 
@@ -690,7 +700,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (changed) {
       markSaving();
       const { error } = await supabase.from('vouchers').update(voucherToRow(changed, activeCompanyId)).eq('id', id);
-      if (error) { console.error("Supabase update voucher error:", error); markSaveError(); return; }
+      if (error) { console.error("Supabase update voucher error:", error); markSaveError(error); return; }
       markSaved();
     }
   };
@@ -716,7 +726,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     markSaving();
     const { error } = await supabase.from('vouchers').update({ deleted_at: now, updated_at: now }).eq('id', id);
-    if (error) { console.error("Supabase delete voucher error:", error); markSaveError(); return; }
+    if (error) { console.error("Supabase delete voucher error:", error); markSaveError(error); return; }
     markSaved();
 
     if (deleted) {
@@ -743,6 +753,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       vouchers: visibleVouchers,
       loading,
       saveStatus,
+      saveError,
       setActiveCompanyId,
       handleCreateCompany,
       handleAttendanceChange,

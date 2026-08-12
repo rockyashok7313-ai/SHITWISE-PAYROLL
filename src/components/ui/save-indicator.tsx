@@ -21,7 +21,7 @@ import { EASE_OUT } from "@/components/ui/motion";
  * always succeeds and only the cloud sync failed, so no work has been lost.
  */
 export function SaveIndicator() {
-  const { saveStatus } = useAppContext();
+  const { saveStatus, saveError } = useAppContext();
   const reduce = useReducedMotion();
 
   const visible = saveStatus !== 'idle';
@@ -67,7 +67,16 @@ export function SaveIndicator() {
             )}
           >
             {content.icon}
-            <span>{content.label}</span>
+            <span className="flex flex-col leading-tight">
+              <span>{content.label}</span>
+              {/* The actual reason, when there is one -- otherwise a failure is
+                  a mystery that needs the browser console to diagnose. */}
+              {saveStatus === 'error' && saveError && (
+                <span className="opacity-80 font-normal max-w-[22rem] truncate" title={saveError}>
+                  {saveError}
+                </span>
+              )}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
