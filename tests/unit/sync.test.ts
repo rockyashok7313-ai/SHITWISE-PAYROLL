@@ -285,3 +285,39 @@ describe('end-to-end: merge then derive what to show and push', () => {
     expect(push.map(r => r.id)).toEqual(['A']);
   });
 });
+
+describe('regression: whole-array save must not wipe everything (staff loss bug)', () => {
+  /* employee-profiles pushed a STALE, empty list back to the provider when the
+   * real list arrived from the cloud. reconcileBulk treats absence as
+   * deletion, so every staff member was tombstoned. These pin the blast
+   * radius of that shape of call so it is understood, not accidental. */
+
+  it('an empty incoming array tombstones EVERYTHING -- why the stale save was catastrophic', () => {
+    const existing: Rec[] = [
+      { id: 'E1', amount: 1, updatedAt: T1 },
+      { id: 'E2', amount: 2, updatedAt: T1 },
+    ];
+    const out = reconcileBulk(existing, [], T3);
+    expect(liveRecords(out)).toHaveLength(0);
+    expect(out.every(r => r.deletedAt === T3)).toBe(true);
+  });
+
+  it('but the records survive as tombstones, so it is recoverable', () => {
+    // This is what makes migration 0008 able to bring the staff back:
+    // clearing deletedAt with a newer updatedAt restores them.
+    const existing: Rec[] = [{ id: 'E1', amount: 1, updatedAt: T1 }];
+    const wiped = reconcileBulk(existing, [], T2);
+    expect(wiped).toHaveLength(1);
+
+    const restored = wiped.map(r => ({ ...r, deletedAt: null, updatedAt: T3 }));
+    expect(liveRecords(restored)).toHaveLength(1);
+    // And the restore must be NEWER, or a merge would re-apply the tombstone.
+    expect(mergeById(wiped, restored).find(r => r.id === 'E1')!.deletedAt).toBeNull();
+  });
+
+  it('a restore that is NOT newer loses to the tombstone -- why updated_at is bumped', () => {
+    const tombstoned: Rec[] = [{ id: 'E1', updatedAt: T2, deletedAt: T2 }];
+    const staleRestore: Rec[] = [{ id: 'E1', updatedAt: T1, deletedAt: null }];
+    expect(mergeById(tombstoned, staleRestore).find(r => r.id === 'E1')!.deletedAt).toBe(T2);
+  });
+});

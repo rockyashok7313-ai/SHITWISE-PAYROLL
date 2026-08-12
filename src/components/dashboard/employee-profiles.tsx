@@ -54,17 +54,38 @@ export function EmployeeProfiles() {
   const [employees, setEmployees] = useState<Employee[]>(propEmployees);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Sync internal state when prop changes (e.g. company switched)
+  /* The last list received FROM the provider. Compared by reference to tell a
+   * genuine local edit apart from this component merely echoing back what it
+   * was just given. */
+  const lastFromProvider = useRef<Employee[]>(propEmployees);
+
+  // Mirror provider state into local state (e.g. cloud load, company switch).
   useEffect(() => {
+    lastFromProvider.current = propEmployees;
     setEmployees(propEmployees);
   }, [propEmployees]);
 
-  // Sync parent state when local state changes
+  /*
+   * Push genuine local edits back to the provider.
+   *
+   * DATA-LOSS BUG THIS FIXES: `propEmployees` used to be in this dependency
+   * array. Effects run after render, so when the provider delivered a new
+   * list (staff arriving from the cloud after the initial empty render) this
+   * effect re-ran in that same commit while `employees` still held the OLD,
+   * usually EMPTY, value -- and pushed that empty list back as if the user
+   * had deleted everyone. handleEmployeesChange reconciles a whole-array
+   * save by tombstoning anything absent from it, so every real staff member
+   * was soft-deleted and the tombstones synced to Supabase.
+   *
+   * Depending only on `employees` is what makes it correct: this effect now
+   * runs only when the local list actually changes, and the ref check stops
+   * it firing for a list that came from the provider in the first place.
+   */
   useEffect(() => {
-    if (employees !== propEmployees) {
-      onEmployeesChange(employees);
-    }
-  }, [employees, propEmployees, onEmployeesChange]);
+    if (employees === lastFromProvider.current) return;
+    onEmployeesChange(employees);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees]);
 
   const [editingEmployee, setEditingEmployee] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
