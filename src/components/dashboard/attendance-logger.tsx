@@ -5,8 +5,9 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
 import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod, entryYearMonth } from "@/lib/attendance-period";
 import { defaultShiftForEmployee } from "@/lib/shift-rules";
-import { calculateEntryBreakdown } from "@/lib/payroll";
+import { calculateEntryBreakdown, perDaySalary } from "@/lib/payroll";
 import { loanBalanceFor } from "@/lib/loans";
+import { refreshEntryLabelsAll, hasRateDrift } from "@/lib/wage-snapshot";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -133,7 +134,15 @@ export function AttendanceLogger() {
    * a genuinely empty month appear to have the previous month's data, and
    * made "the previous month's attendance" show up "in the next month too".
    * Removed entirely; only the harmless part (refreshing an entry's
-   * name/rate/role if the employee record changed) is kept.
+   * name/role if the employee record changed) is kept.
+   *
+   * RATE IS NO LONGER REFRESHED HERE. It used to be, across the full set --
+   * every month, every year -- so a single wage change re-priced all of
+   * history. A labourer moved from Rs.620/day to Rs.675/day had their already
+   * finalised and voucher-paid June silently restated at Rs.675. See
+   * @/lib/wage-snapshot for the rule and its tests: a row's rate is the wage
+   * in force when that period was worked, and an increment applies only to
+   * rows created after it.
    */
   useEffect(() => {
     const loadedEntries = attendance || [];
@@ -144,18 +153,12 @@ export function AttendanceLogger() {
     }
 
     const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
-    let hasChanges = false;
-    const refreshed = loadedEntries.map(entry => {
-      const refId = entry.employeeRefId || entry.id.split('-')[0];
-      const emp = currentEmployees.find((e: Employee) => e.id === refId);
-      if (emp && (emp.rate !== entry.rate || emp.name !== entry.name || emp.role !== entry.role)) {
-        hasChanges = true;
-        return { ...entry, rate: emp.rate, name: emp.name, role: emp.role };
-      }
-      return entry;
-    });
-
-    const next = hasChanges ? refreshed : loadedEntries;
+    const next = refreshEntryLabelsAll(
+      loadedEntries,
+      currentEmployees,
+      (entry: AttendanceRecord) =>
+        currentEmployees.find((e: Employee) => e.id === (entry.employeeRefId || entry.id.split('-')[0]))
+    );
     // Record what came FROM the provider so the save effect below can tell a
     // real local edit apart from this component echoing the list back.
     lastFromProvider.current = next;
@@ -937,6 +940,27 @@ export function AttendanceLogger() {
                         {entry.isModified && <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />}
                       </span>
                       <span className="text-[10px] text-muted-foreground uppercase tracking-tight">{entry.id} • {entry.role}</span>
+                      {/* This row was priced at a different wage than the
+                          labourer is on now. Shown rather than silently
+                          reconciled -- the old rate is correct for a period
+                          already worked, and hiding it would look like a bug. */}
+                      {(() => {
+                        const emp = (employees || []).find(
+                          (e: Employee) => e.id === (entry.employeeRefId || entry.id.split('-')[0])
+                        );
+                        if (!hasRateDrift(entry, emp)) return null;
+                        const was = Math.round(perDaySalary(entry.rate, entry.shift));
+                        const now = Math.round(perDaySalary(emp!.rate, entry.shift));
+                        return (
+                          <span
+                            className="mt-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-500"
+                            title={`This period was worked at ₹${was}/day. The current wage is ₹${now}/day — later periods use that.`}
+                          >
+                            paid @ ₹{was.toLocaleString('en-IN')}/day
+                            <span className="font-normal text-muted-foreground"> (now ₹{now.toLocaleString('en-IN')})</span>
+                          </span>
+                        );
+                      })()}
                     </div>
                   </TableCell>
                   <TableCell>
