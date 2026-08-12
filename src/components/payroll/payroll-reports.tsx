@@ -574,7 +574,28 @@ export function PayrollReports() {
       ];
       
       let pageNumber = 1;
-      const colBounds = [15, 32, 72, 120, 155, 190, 225, 270, 282];
+
+      /* Column rules. Role and Days used to share the single 72-120 cell --
+       * Role written left from 74, Days right-aligned at 115 -- so the two ran
+       * together with no rule between them while every other column had one.
+       * 103 splits them: it clears the widest role text (see fitToColumn
+       * below) and leaves the Days figure, which right-aligns at 115, room to
+       * about 106. */
+      const ROLE_DAYS_BOUND = 103;
+      const colBounds = [15, 32, 72, ROLE_DAYS_BOUND, 120, 155, 190, 225, 270, 282];
+
+      /* Clip text to a column, measured in the CURRENT font rather than by a
+       * character count. The old `.substring(0, 15)` was a guess at width: a
+       * wide 15-character role ran past 103 and would now collide with the new
+       * rule. Measuring means any role string stays inside its cell. */
+      const fitToColumn = (text: string, maxWidth: number) => {
+        if (pdf.getTextWidth(text) <= maxWidth) return text;
+        let clipped = text;
+        while (clipped.length > 1 && pdf.getTextWidth(clipped + ".") > maxWidth) {
+          clipped = clipped.slice(0, -1);
+        }
+        return clipped + ".";
+      };
       
       const drawTableHeaders = (startY: number) => {
         pdf.setFillColor(243, 244, 246); 
@@ -653,7 +674,8 @@ export function PayrollReports() {
         
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(fontSize - 1);
-        pdf.text((entry.role || "Staff").substring(0, 15), 74, y);
+        // 74 is the text origin, 2mm of padding before the new rule at 103.
+        pdf.text(fitToColumn(entry.role || "Staff", ROLE_DAYS_BOUND - 74 - 2), 74, y);
         
         pdf.setFont("courier", "normal");
         pdf.setFontSize(fontSize);
