@@ -273,9 +273,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             try {
               const parsedLocal = companiesToMigrate;
               if (parsedLocal.length > 0) {
-                // Migrate companies
+                // Migrate companies.
+                // owner_id is essential, not cosmetic: multi-tenancy RLS
+                // (migration 0006) grants access only to companies you own or
+                // are a member of. This path previously omitted it, so any
+                // company migrated up from localStorage was left ownerless --
+                // and would become invisible to everyone once isolation is
+                // enforced.
+                const { data: { user: migratingUser } } = await supabase.auth.getUser();
                 await supabase.from('companies').upsert(parsedLocal.map((c: any) => ({
                   id: c.id,
+                  owner_id: migratingUser?.id || null,
                   name: c.name,
                   unit: c.unit,
                   standard_shift_hours: c.standardShiftHours || 9,
