@@ -4,6 +4,13 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useRef 
 import { supabase } from "@/lib/supabase";
 import { mergeById, liveRecords, recordsToPush, reconcileBulk, sameSyncState } from "@/lib/sync";
 import { shouldAutoBackup, downloadBackupNow, DEFAULT_AUTO_BACKUP_INTERVAL_MS } from "@/lib/backup";
+import {
+  detectWageChanges,
+  buildWageChangeAudit,
+  buildVoucherDeleteAudit,
+  type AuditRow,
+  type AuditActor,
+} from "@/lib/audit";
 import { useRouter } from "next/navigation";
 import { useRole } from "@/hooks/use-role";
 import { useToast } from "@/hooks/use-toast";
@@ -188,6 +195,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const markSaved = () => settleSave('saved');
   const markSaveError = () => settleSave('error');
+
+  /**
+   * Writes audit rows, fire-and-forget.
+   *
+   * Deliberately swallows every failure: an audit write must never be able
+   * to fail a payroll edit. A missing audit row is bad; a lost wage change
+   * or a voucher that appears deleted but is not, is worse. Failures are
+   * logged so they are still diagnosable.
+   */
+  const recordAudit = async (rows: AuditRow[]) => {
+    if (!rows.length) return;
+    try {
+      const { error } = await supabase.from('audit_logs').insert(rows);
+      if (error) console.error("Audit log write failed:", error);
+    } catch (e) {
+      console.error("Audit log write threw:", e);
+    }
+  };
+
+  /** Current user for audit attribution. Never throws -- an unattributed
+   *  audit row is far better than no audit row. */
+  const getAuditActor = async (): Promise<AuditActor> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      return { userId: user?.id ?? null, userEmail: user?.email ?? null };
+    } catch {
+      return { userId: null, userEmail: null };
+    }
+  };
 
   // Don't leave a timer running after unmount.
   useEffect(() => clearSaveTimer, []);
@@ -554,6 +590,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const now = new Date().toISOString();
     const reconciled = reconcileBulk(employees, newEmployees, now);
     if (sameSyncState(reconciled, employees)) return;
+    // Diff BEFORE the state swap, against the previous employees snapshot --
+    // this is the only point where both the old and new rates exist.
+    const wageChanges = detectWageChanges(employees, newEmployees);
+
     setEmployees(reconciled);
     if (activeCompanyId) {
       markSaving();
@@ -564,6 +604,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (error) { console.error("Supabase upsert employees error:", error); markSaveError(); return; }
       }
       markSaved();
+
+      if (wageChanges.length > 0) {
+        const actor = await getAuditActor();
+        await recordAudit(wageChanges.map(c => buildWageChangeAudit(c, activeCompanyId, actor)));
+      }
     }
   };
 
@@ -652,6 +697,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // propagates to other machines instead of a shorter list looking "behind"
     // and the row being resurrected. Live-only exposure hides it from the UI.
     const now = new Date().toISOString();
+    // Capture the voucher BEFORE tombstoning it -- afterwards the live view
+    // filters it out and the record is no longer retrievable for the log.
+    const deleted = vouchers.find((v: any) => v.id === id);
+
     const updated = vouchers.map((v: any) => v.id === id ? { ...v, deletedAt: now, updatedAt: now } : v);
     setVouchers(updated);
     localStorage.setItem(`vouchers_${activeCompanyId}`, JSON.stringify(updated));
@@ -661,6 +710,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const { error } = await supabase.from('vouchers').update({ deleted_at: now, updated_at: now }).eq('id', id);
     if (error) { console.error("Supabase delete voucher error:", error); markSaveError(); return; }
     markSaved();
+
+    if (deleted) {
+      const actor = await getAuditActor();
+      await recordAudit([buildVoucherDeleteAudit(deleted, activeCompanyId, actor, now)]);
+    }
   };
 
   /* State holds the full merged sets including tombstones -- the handlers and
