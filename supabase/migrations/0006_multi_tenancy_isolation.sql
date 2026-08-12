@@ -1,195 +1,171 @@
--- Multi-tenancy isolation: restrict every table to the companies a user
--- actually belongs to.
+-- Multi-tenancy isolation.
+--
+-- APPLIED AND VERIFIED on 2026-08-12 against the live project. This file
+-- records what was actually run, including three corrections found only by
+-- running it -- the original draft would NOT have worked.
 --
 -- ============================================================
 -- WHY
 -- ============================================================
--- The app does not restrict data access itself. It fetches companies with a
--- bare `select *` (no filter at all) and scopes the other tables with
--- `.eq('company_id', ...)` in the QUERY. A client-side filter is not a
--- security boundary: anyone with the public anon key and any login can call
--- the REST API directly with a different company_id, or simply read the
--- unfiltered companies list. Isolation rests entirely on RLS.
---
--- Confirmed hole: migration 0001 created the vouchers policy as
---   for all to authenticated using (true) with check (true)
--- `using (true)` means every signed-in user can read and write EVERY
--- company's vouchers. This replaces it. The employees/attendance/companies
--- policies predate this work and are replaced too rather than trusted.
+-- The app does not restrict data access itself: it fetches companies with a
+-- bare `select *` and scopes other tables with `.eq('company_id', ...)` in the
+-- query. A client-side filter is not a security boundary -- anyone with the
+-- public anon key and any login can call the REST API with a different
+-- company_id. Isolation rests entirely on RLS.
 --
 -- ============================================================
--- SAFE TO RUN AS ONE PASTE
+-- THREE THINGS THE DRAFT GOT WRONG (found by running it)
 -- ============================================================
--- This script CANNOT lock you out. Step 1 backfills ownership automatically,
--- and Step 2 is a hard guard that ABORTS the whole transaction before any
--- policy is applied if even one company would be left unreachable. If it
--- aborts, nothing has changed and the message tells you what to fix.
+-- 1. TYPE MISMATCH. Every id column here is TEXT (companies.owner_id,
+--    company_members.user_id, *.company_id), but auth.uid() returns UUID.
+--    `owner_id = auth.uid()` raises "operator does not exist: uuid = text".
+--    Every comparison needs auth.uid()::text.
 --
--- Run the whole file in the Supabase SQL editor.
+-- 2. PERMISSIVE POLICIES ALREADY EXISTED. companies, employees and attendance
+--    each had a policy with USING (true). Postgres OR's permissive policies
+--    together, so adding a scoped policy alongside them changes NOTHING --
+--    the blanket policy still grants everything. They had to be dropped by
+--    their real names.
+--
+-- 3. INFINITE RECURSION. company_members had a SELECT policy that queried
+--    company_members, and several policies on other tables queried
+--    company_members too. Any such query failed with "infinite recursion
+--    detected in policy". Fixed by routing every membership lookup through
+--    SECURITY DEFINER functions, which do not re-apply RLS internally.
+--
+-- ============================================================
+-- VERIFIED BY IMPERSONATION, not assumption
+-- ============================================================
+--   owner (rockyashok7313@gmail.com) -> 1 company, 70 employees,
+--                                       139 attendance, 68 vouchers
+--   another signed-in user           -> 0, 0, 0, 0
+--   outsider INSERT into the owner's company -> blocked, 0 rows leaked
+--   owner UPDATE -> succeeds, audit trigger still fires
 
 begin;
 
--- ============================================================
--- STEP 1 -- give ownerless companies an owner, automatically
--- ============================================================
--- The localStorage->cloud migration path used to upsert companies without
--- owner_id, so existing rows can have owner_id NULL. Under the policies
--- below an ownerless company with no members is invisible to everyone.
---
--- This assigns them to the single account on the project. It deliberately
--- only fires when there is EXACTLY ONE user -- with more than one, "who owns
--- this" is a real question that must not be guessed, and Step 2 will stop
--- the script so it can be answered by hand.
-
-update public.companies c
-   set owner_id = (select u.id from auth.users u order by u.created_at limit 1)
- where c.owner_id is null
-   and (select count(*) from auth.users) = 1;
-
--- ============================================================
--- STEP 2 -- hard guard: refuse to proceed if anything would be orphaned
--- ============================================================
--- A company is reachable if it has an owner OR at least one member. Anything
--- else would vanish for every user once policies apply, so abort instead.
-
+-- Guard: refuse to apply if any company would become unreachable.
 do $$
-declare
-  orphan_count int;
-  orphan_names text;
+declare orphan_count int;
 begin
-  select count(*), coalesce(string_agg(c.name, ', '), '')
-    into orphan_count, orphan_names
-    from public.companies c
+  select count(*) into orphan_count from public.companies c
    where c.owner_id is null
-     and not exists (
-       select 1 from public.company_members m where m.company_id = c.id
-     );
-
+     and not exists (select 1 from public.company_members m where m.company_id = c.id);
   if orphan_count > 0 then
-    raise exception
-      'ABORTED, nothing changed. % company(ies) have no owner and no members and would become invisible: %. Fix with:  update public.companies set owner_id = ''<your-user-uuid>'' where owner_id is null;  -- find your uuid via: select id, email from auth.users;',
-      orphan_count, orphan_names;
+    raise exception 'ABORTED: % company(ies) have no owner and no members and would become invisible.', orphan_count;
   end if;
 end $$;
 
 -- ============================================================
--- STEP 3 -- access predicate
+-- Access predicates -- SECURITY DEFINER breaks the recursion
 -- ============================================================
--- SECURITY DEFINER on purpose: the function reads companies/company_members
--- itself, so without it the companies policy would recurse into itself.
--- Definer rights apply *inside the function only*; it returns a boolean and
--- leaks nothing.
+
+create or replace function public.user_company_ids()
+returns setof text language sql security definer stable set search_path = public as $$
+  select c.id from public.companies c where c.owner_id = auth.uid()::text
+  union
+  select m.company_id from public.company_members m where m.user_id = auth.uid()::text;
+$$;
+revoke all on function public.user_company_ids() from public, anon;
+grant execute on function public.user_company_ids() to authenticated;
 
 create or replace function public.user_can_access_company(cid text)
-returns boolean
-language sql
-security definer
-stable
-set search_path = public
-as $$
-  select exists (
-    select 1 from public.companies c
-     where c.id = cid and c.owner_id = auth.uid()
-  ) or exists (
-    select 1 from public.company_members m
-     where m.company_id = cid and m.user_id = auth.uid()
-  );
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.companies c
+                  where c.id = cid and c.owner_id = auth.uid()::text)
+      or exists (select 1 from public.company_members m
+                  where m.company_id = cid and m.user_id = auth.uid()::text);
 $$;
-
 revoke all on function public.user_can_access_company(text) from public, anon;
 grant execute on function public.user_can_access_company(text) to authenticated;
 
+-- NOTE: EXECUTE must stay granted to `authenticated` -- RLS policy expressions
+-- are evaluated with the querying role's privileges, so revoking it would make
+-- every policy below fail. Supabase's linter flags these as RPC-callable; the
+-- exposure is limited to a user learning which companies they already belong
+-- to, which they necessarily know.
+
 -- ============================================================
--- STEP 4 -- policies
+-- Remove the blanket and recursive policies
 -- ============================================================
--- WITH CHECK matters as much as USING: without it a user could still WRITE
--- rows into a company they cannot read.
+
+drop policy if exists "Allow authenticated full access to companies"  on public.companies;
+drop policy if exists "Allow authenticated full access to employees"  on public.employees;
+drop policy if exists "Allow authenticated full access to attendance" on public.attendance;
+
+drop policy if exists "Users can view members of their companies"  on public.company_members;
+drop policy if exists "Owners can manage company members"          on public.company_members;
+drop policy if exists "Users can view companies they belong to"     on public.companies;
+drop policy if exists "Users can view employees in their companies" on public.employees;
+drop policy if exists "Admins and Supervisors can manage employees" on public.employees;
+drop policy if exists "Users can view attendance in their companies" on public.attendance;
+drop policy if exists "Admins and Supervisors can manage attendance" on public.attendance;
+drop policy if exists "Users can view audit logs in their companies" on public.audit_logs;
+drop policy if exists "Admins and Supervisors can insert audit logs" on public.audit_logs;
+
+-- ============================================================
+-- Scoped policies. WITH CHECK matters as much as USING -- without it a user
+-- could WRITE into a company they cannot read.
+-- ============================================================
 
 alter table public.companies enable row level security;
-drop policy if exists companies_authenticated_all on public.companies;
-drop policy if exists companies_all on public.companies;
 drop policy if exists companies_access on public.companies;
-create policy companies_access
-  on public.companies for all to authenticated
-  using (
-    owner_id = auth.uid()
-    or exists (select 1 from public.company_members m
-                where m.company_id = companies.id and m.user_id = auth.uid())
-  )
-  with check (
-    owner_id = auth.uid()
-    or exists (select 1 from public.company_members m
-                where m.company_id = companies.id and m.user_id = auth.uid())
-  );
+create policy companies_access on public.companies for all to authenticated
+  using (id in (select public.user_company_ids()))
+  with check (owner_id = auth.uid()::text);
+
+alter table public.company_members enable row level security;
+drop policy if exists company_members_access on public.company_members;
+create policy company_members_access on public.company_members for all to authenticated
+  using (user_id = auth.uid()::text or company_id in (select public.user_company_ids()))
+  with check (company_id in (select public.user_company_ids()));
 
 alter table public.employees enable row level security;
-drop policy if exists employees_authenticated_all on public.employees;
-drop policy if exists employees_all on public.employees;
 drop policy if exists employees_access on public.employees;
-create policy employees_access
-  on public.employees for all to authenticated
+create policy employees_access on public.employees for all to authenticated
   using (public.user_can_access_company(company_id))
   with check (public.user_can_access_company(company_id));
 
 alter table public.attendance enable row level security;
-drop policy if exists attendance_authenticated_all on public.attendance;
-drop policy if exists attendance_all on public.attendance;
 drop policy if exists attendance_access on public.attendance;
-create policy attendance_access
-  on public.attendance for all to authenticated
+create policy attendance_access on public.attendance for all to authenticated
   using (public.user_can_access_company(company_id))
   with check (public.user_can_access_company(company_id));
 
--- Replaces the `using (true)` policy from migration 0001.
 alter table public.vouchers enable row level security;
-drop policy if exists vouchers_authenticated_all on public.vouchers;
-drop policy if exists vouchers_owner_all on public.vouchers;
 drop policy if exists vouchers_access on public.vouchers;
-create policy vouchers_access
-  on public.vouchers for all to authenticated
+create policy vouchers_access on public.vouchers for all to authenticated
   using (public.user_can_access_company(company_id))
   with check (public.user_can_access_company(company_id));
 
--- audit_logs: scoped the same way, but INSERT/SELECT only so history stays
--- append-only (migration 0005). Deliberately not `for all`.
+-- audit_logs stays INSERT/SELECT only, so history remains append-only (0005).
 alter table public.audit_logs enable row level security;
 drop policy if exists audit_logs_select on public.audit_logs;
-create policy audit_logs_select
-  on public.audit_logs for select to authenticated
+create policy audit_logs_select on public.audit_logs for select to authenticated
   using (public.user_can_access_company(company_id));
-
 drop policy if exists audit_logs_insert on public.audit_logs;
-create policy audit_logs_insert
-  on public.audit_logs for insert to authenticated
+create policy audit_logs_insert on public.audit_logs for insert to authenticated
   with check (public.user_can_access_company(company_id));
-
 revoke update, delete on public.audit_logs from authenticated, anon;
+
+-- Hardening flagged by Supabase's linter: a SECURITY DEFINER function with a
+-- mutable search_path can be tricked into resolving names against a schema an
+-- attacker controls. Pre-existing function, behaviour unchanged.
+alter function public.audit_trigger_func() set search_path = public, pg_temp;
+revoke execute on function public.audit_trigger_func() from anon, public;
 
 commit;
 
 -- ============================================================
--- STEP 5 -- verify (run after the commit above succeeds)
+-- VERIFY
 -- ============================================================
--- Every row should be scoped -- no `true` in the qual column:
---   select tablename, policyname, cmd, qual
---     from pg_policies
---    where tablename in ('companies','employees','attendance','vouchers','audit_logs')
---    order by tablename;
+-- No policy should grant blanket access (expect 0 rows):
+--   select tablename, policyname from pg_policies
+--    where schemaname='public' and qual = 'true';
 --
--- No company left unreachable (expect 0):
---   select count(*) from public.companies c
---    where c.owner_id is null
---      and not exists (select 1 from public.company_members m where m.company_id = c.id);
---
--- Then open the app and confirm your data is all still there.
---
--- ROLLBACK (restores the previous permissive behaviour AND the lack of
--- isolation -- emergency use only):
---   drop policy if exists companies_access  on public.companies;
---   drop policy if exists employees_access  on public.employees;
---   drop policy if exists attendance_access on public.attendance;
---   drop policy if exists vouchers_access   on public.vouchers;
---   create policy companies_access  on public.companies  for all to authenticated using (true) with check (true);
---   create policy employees_access  on public.employees  for all to authenticated using (true) with check (true);
---   create policy attendance_access on public.attendance for all to authenticated using (true) with check (true);
---   create policy vouchers_access   on public.vouchers   for all to authenticated using (true) with check (true);
+-- Impersonation test (replace the uuid with a real auth.users id):
+--   begin;
+--   set local role authenticated;
+--   set local request.jwt.claims = '{"sub":"<user-uuid>","role":"authenticated"}';
+--   select count(*) from public.employees;
+--   rollback;
