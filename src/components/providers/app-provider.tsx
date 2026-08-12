@@ -338,7 +338,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const newId = `co_${Date.now()}`;
         const defaultCompany = {
           id: newId,
-          owner_id: user?.id || "",
+          owner_id: user?.id ?? null,   // never "" -- an empty string fails the owner_id = auth.uid() RLS check and is not a valid uuid
           name: "ShiftWise Systems Ltd",
           unit: "Unit #1 - Manufacturing",
           standard_shift_hours: 9,
@@ -542,7 +542,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const newId = `co_${Date.now()}`;
     const newCompanyObj = {
       id: newId,
-      owner_id: user?.id || "",
+      owner_id: user?.id ?? null,   // never "" -- an empty string fails the owner_id = auth.uid() RLS check and is not a valid uuid
       name: details.name,
       unit: details.unit,
       standard_shift_hours: 9,
