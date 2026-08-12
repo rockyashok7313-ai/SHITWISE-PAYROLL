@@ -5,6 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
 import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod } from "@/lib/attendance-period";
 import { defaultShiftForEmployee } from "@/lib/shift-rules";
+import { calculateEntryBreakdown } from "@/lib/payroll";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -533,6 +534,31 @@ export function AttendanceLogger() {
   const selectedDialogEmployee = (employees && employees.length > 0 ? employees : EMPLOYEES)
     .find((e: any) => e.id === newEntryEmployeeId) as any;
 
+  /**
+   * Live payout preview for what is currently typed into the dialog, so the
+   * amount is visible BEFORE saving rather than only afterwards in the table.
+   *
+   * Uses the shared payroll calculation (lib/payroll) rather than repeating
+   * the formula -- this screen already has several inline copies of it, and
+   * a preview that disagreed with the saved row would be worse than no
+   * preview at all. Null until an employee is chosen, since the rate comes
+   * from them.
+   */
+  const dialogPreview = useMemo(() => {
+    if (!selectedDialogEmployee) return null;
+    return calculateEntryBreakdown(
+      {
+        hours: Number(newEntryDetails.hours) || 0,
+        rate: selectedDialogEmployee.rate,
+        shift: newEntryDetails.shift,
+        incentive: Number(newEntryDetails.incentive) || 0,
+        weeklyAdvance: Number(newEntryDetails.weeklyAdvance) || 0,
+        loan: Number(newEntryDetails.loan) || 0,
+      },
+      { rate: selectedDialogEmployee.rate, shift: selectedDialogEmployee.shift }
+    );
+  }, [selectedDialogEmployee, newEntryDetails]);
+
   const handleAddAttendance = () => {
     if (!newEntryEmployeeId) return;
     const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
@@ -829,10 +855,12 @@ export function AttendanceLogger() {
             {visibleEntries
               .filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.id.toLowerCase().includes(searchQuery.toLowerCase()))
               .map((entry) => {
-              const shiftHrs = entry.shift === '12-hour' ? 12 : 9;
-              const grossWage = entry.hours * (entry.rate * shiftHrs);
-              const rawNet = grossWage + entry.incentive - entry.weeklyAdvance - entry.loan;
-              const netPayout = Math.round(rawNet);
+              // Shared payroll calculation, same as the dialog preview and the
+              // payroll register -- so the previewed amount and the saved row
+              // can never disagree.
+              const breakdown = calculateEntryBreakdown(entry as any, { rate: entry.rate, shift: entry.shift });
+              const rawNet = breakdown.gross + breakdown.incentive - breakdown.deductions;
+              const netPayout = breakdown.net;
               const roundoff = netPayout - rawNet;
               const isEditing = false; // Inline edit removed
 
@@ -1316,11 +1344,47 @@ export function AttendanceLogger() {
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold">Loan (-)</label>
-                <Input 
-                  type="number" 
-                  value={newEntryDetails.loan} 
+                <Input
+                  type="number"
+                  value={newEntryDetails.loan}
                   onChange={e => setNewEntryDetails(p => ({ ...p, loan: parseFloat(e.target.value) || 0 }))}
                 />
+              </div>
+
+              {/* Live payout preview -- the amount this entry will actually
+                  pay, visible before saving. Same shared calculation the
+                  table and payroll register use. */}
+              <div className="col-span-2">
+                <div className="rounded-lg border border-accent/30 bg-accent/5 p-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-accent">
+                      Net Payout
+                    </span>
+                    <span className="font-headline text-2xl font-black text-accent tabular-nums">
+                      {dialogPreview
+                        ? `₹${dialogPreview.net.toLocaleString('en-IN')}`
+                        : <span className="text-sm font-normal text-muted-foreground">Select a labourer</span>}
+                    </span>
+                  </div>
+
+                  {dialogPreview && (
+                    <>
+                      <p className="mt-1.5 text-[11px] text-muted-foreground leading-relaxed">
+                        {dialogPreview.days} day{dialogPreview.days === 1 ? '' : 's'} &times; ₹
+                        {dialogPreview.perDaySalary.toLocaleString('en-IN')}/day
+                        {' '}(₹{dialogPreview.rate}/hr &times; {dialogPreview.shiftHours}h)
+                        {' = '}₹{dialogPreview.gross.toLocaleString('en-IN')}
+                        {dialogPreview.incentive > 0 && <> &nbsp;+&nbsp; ₹{dialogPreview.incentive.toLocaleString('en-IN')} incentive</>}
+                        {dialogPreview.deductions > 0 && <> &nbsp;&minus;&nbsp; ₹{dialogPreview.deductions.toLocaleString('en-IN')} deductions</>}
+                      </p>
+                      {dialogPreview.net < 0 && (
+                        <p className="mt-1 text-[11px] font-semibold text-destructive">
+                          Negative — deductions exceed earnings for this period.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
