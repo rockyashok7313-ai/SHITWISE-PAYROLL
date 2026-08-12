@@ -34,6 +34,7 @@ import {
   AttendanceEntry,
   calculatePeriodTotals,
   filterAttendanceForPeriod,
+  perDaySalary,
   shiftHoursFor,
   yearForMonth,
   yearOptions
@@ -561,33 +562,73 @@ export function PayrollReports() {
       pdf.setLineWidth(0.5);
       pdf.line(15, 52, 282, 52);
       
-      // Table Header Setup
-      const headers = [
-        { label: "ID", x: 17, align: "left" },
-        { label: "Name", x: 34, align: "left" },
-        { label: "Role", x: 74, align: "left" },
-        { label: "Days", x: 115, align: "right" },
-        { label: "Gross", x: 150, align: "right" },
-        { label: "Incent.", x: 185, align: "right" },
-        { label: "Deductions", x: 220, align: "right" },
-        { label: "Net Payout", x: 265, align: "right" }
-      ];
-      
       let pageNumber = 1;
 
-      /* Column rules. Role and Days used to share the single 72-120 cell --
-       * Role written left from 74, Days right-aligned at 115 -- so the two ran
-       * together with no rule between them while every other column had one.
-       * 103 splits them: it clears the widest role text (see fitToColumn
-       * below) and leaves the Days figure, which right-aligns at 115, room to
-       * about 106. */
-      const ROLE_DAYS_BOUND = 103;
-      const colBounds = [15, 32, 72, ROLE_DAYS_BOUND, 120, 155, 190, 225, 270, 282];
+      /* ---- Table column model ------------------------------------------
+       *
+       * Declared ONCE as {label, width, align}; the header labels, the
+       * vertical rules and every text origin are derived from it.
+       *
+       * This replaces two hand-maintained parallel lists (`headers` with x
+       * positions, `colBounds` with rule positions). They had already drifted
+       * out of step: Role and Days shared one cell because colBounds was
+       * missing a boundary that the header x positions implied, so those two
+       * columns ran together while every other pair had a rule. Deriving both
+       * from one source makes that class of bug unrepresentable.
+       *
+       * FITTING A4 LANDSCAPE: the page is 297mm wide and the table is inset
+       * 15mm each side, so the widths must total TABLE_WIDTH (267mm). The
+       * assertion below fails the export loudly rather than letting a column
+       * run off the paper.
+       */
+      const TABLE_LEFT = 15;
+      const TABLE_WIDTH = 267;
+      const PAD_LEFT = 2;   // inset for left-aligned text
+      const PAD_RIGHT = 3;  // inset for right-aligned figures
+
+      const columns = [
+        { key: "id",         label: "ID",         width: 17, align: "left"  },
+        { key: "name",       label: "Name",       width: 42, align: "left"  },
+        { key: "role",       label: "Role",       width: 30, align: "left"  },
+        { key: "days",       label: "Days",       width: 16, align: "right" },
+        { key: "perDay",     label: "Per Day",    width: 25, align: "right" },
+        { key: "gross",      label: "Gross",      width: 33, align: "right" },
+        { key: "incentive",  label: "Incent.",    width: 28, align: "right" },
+        { key: "deductions", label: "Deductions", width: 34, align: "right" },
+        { key: "net",        label: "Net Payout", width: 42, align: "right" },
+      ] as const;
+
+      const declaredWidth = columns.reduce((sum, c) => sum + c.width, 0);
+      if (declaredWidth !== TABLE_WIDTH) {
+        throw new Error(
+          `Payroll PDF columns total ${declaredWidth}mm but the A4 landscape ` +
+          `table is ${TABLE_WIDTH}mm wide. Adjust the column widths.`
+        );
+      }
+
+      // Left edge of each column, plus the table's right edge: the rules.
+      const colLeft: number[] = [];
+      columns.reduce((x, c) => { colLeft.push(x); return x + c.width; }, TABLE_LEFT);
+      const colBounds = [...colLeft, TABLE_LEFT + TABLE_WIDTH];
+
+      const colIndex = Object.fromEntries(columns.map((c, i) => [c.key, i])) as Record<string, number>;
+
+      /** Text origin for a column: its inset left edge, or its inset right edge. */
+      const xOf = (key: string) => {
+        const i = colIndex[key];
+        const c = columns[i];
+        return c.align === "left" ? colLeft[i] + PAD_LEFT : colLeft[i] + c.width - PAD_RIGHT;
+      };
+      const alignOf = (key: string) => columns[colIndex[key]].align;
+      /** Usable text width inside a column. */
+      const widthOf = (key: string) => columns[colIndex[key]].width - PAD_LEFT - PAD_RIGHT;
+
+      const headers = columns.map(c => ({ label: c.label, x: xOf(c.key), align: c.align }));
 
       /* Clip text to a column, measured in the CURRENT font rather than by a
        * character count. The old `.substring(0, 15)` was a guess at width: a
-       * wide 15-character role ran past 103 and would now collide with the new
-       * rule. Measuring means any role string stays inside its cell. */
+       * wide role overflowed into the next column. Measuring means any string
+       * stays inside its cell whatever the font. */
       const fitToColumn = (text: string, maxWidth: number) => {
         if (pdf.getTextWidth(text) <= maxWidth) return text;
         let clipped = text;
@@ -596,6 +637,9 @@ export function PayrollReports() {
         }
         return clipped + ".";
       };
+
+      /** Whole rupees -- the register has no room for paise on every column. */
+      const money = (n: number) => Math.round(n).toLocaleString("en-IN");
       
       const drawTableHeaders = (startY: number) => {
         pdf.setFillColor(243, 244, 246); 
@@ -642,12 +686,14 @@ export function PayrollReports() {
       pdf.setFont("helvetica", "normal");
       pdf.setTextColor(0, 0, 0);
       
+      let totalDays = 0;
       let totalGross = 0;
       let totalIncentive = 0;
       let totalDeductions = 0;
       let totalNet = 0;
-      
+
       exportEntries.forEach((entry, idx) => {
+        totalDays += entry.daysWorked;
         totalGross += entry.gross;
         totalIncentive += entry.incentive;
         totalDeductions += entry.deductions;
@@ -666,26 +712,26 @@ export function PayrollReports() {
         pdf.setFont("courier", "normal");
         pdf.setFontSize(fontSize);
         const shortId = `LBR${entry.id.substring(entry.id.length - 4).toUpperCase()}`;
-        pdf.text(shortId, 17, y);
-        
+        pdf.text(shortId, xOf("id"), y);
+
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(fontSize);
-        pdf.text(entry.name.substring(0, 16), 34, y);
-        
+        pdf.text(fitToColumn(entry.name, widthOf("name")), xOf("name"), y);
+
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(fontSize - 1);
-        // 74 is the text origin, 2mm of padding before the new rule at 103.
-        pdf.text(fitToColumn(entry.role || "Staff", ROLE_DAYS_BOUND - 74 - 2), 74, y);
-        
+        pdf.text(fitToColumn(entry.role || "Staff", widthOf("role")), xOf("role"), y);
+
         pdf.setFont("courier", "normal");
         pdf.setFontSize(fontSize);
-        pdf.text(String(entry.daysWorked), 115, y, { align: "right" });
-        pdf.text(entry.gross.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 150, y, { align: "right" });
-        pdf.text(entry.incentive.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 185, y, { align: "right" });
-        pdf.text(entry.deductions.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 220, y, { align: "right" });
-        
+        pdf.text(String(entry.daysWorked), xOf("days"), y, { align: "right" });
+        pdf.text(money(entry.perDay), xOf("perDay"), y, { align: "right" });
+        pdf.text(money(entry.gross), xOf("gross"), y, { align: "right" });
+        pdf.text(money(entry.incentive), xOf("incentive"), y, { align: "right" });
+        pdf.text(money(entry.deductions), xOf("deductions"), y, { align: "right" });
+
         pdf.setFont("courier", "bold");
-        pdf.text(`${entry.net.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 265, y, { align: "right" });
+        pdf.text(money(entry.net), xOf("net"), y, { align: "right" });
         
         pdf.setDrawColor(209, 213, 219);
         pdf.line(15, rowBottom, 282, rowBottom);
@@ -715,14 +761,17 @@ export function PayrollReports() {
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8.5);
       pdf.setTextColor(31, 41, 55);
-      pdf.text("TOTALS", 34, footerY);
-      
+      pdf.text("TOTALS", xOf("name"), footerY);
+
       pdf.setFont("courier", "bold");
-      pdf.text("-", 115, footerY, { align: "right" });
-      pdf.text(totalGross.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 150, footerY, { align: "right" });
-      pdf.text(totalIncentive.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 185, footerY, { align: "right" });
-      pdf.text(totalDeductions.toLocaleString('en-IN', { maximumFractionDigits: 2 }), 220, footerY, { align: "right" });
-      pdf.text(`${totalNet.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 265, footerY, { align: "right" });
+      pdf.text(String(Math.round(totalDays * 100) / 100), xOf("days"), footerY, { align: "right" });
+      // Per Day is a rate, not a quantity -- summing it across labourers would
+      // be meaningless, so the column is dashed out in the totals row.
+      pdf.text("-", xOf("perDay"), footerY, { align: "right" });
+      pdf.text(money(totalGross), xOf("gross"), footerY, { align: "right" });
+      pdf.text(money(totalIncentive), xOf("incentive"), footerY, { align: "right" });
+      pdf.text(money(totalDeductions), xOf("deductions"), footerY, { align: "right" });
+      pdf.text(money(totalNet), xOf("net"), footerY, { align: "right" });
       
       // Signature lines
       const sigY = y + 15;
@@ -811,6 +860,16 @@ Please contact HR if you have any questions.`;
         return {
           ...emp,
           daysWorked: totals.days,
+          /* A full day's pay for THIS period, derived from what was actually
+           * earned rather than from emp.rate. Attendance rows carry their own
+           * rate (see @/lib/wage-snapshot), so a month finalised at Rs.620/day
+           * must keep reporting Rs.620 even after the labourer moves to
+           * Rs.675 -- reading emp.rate here would print the new wage beside a
+           * gross computed from the old one. Falls back to the current
+           * standard rate only when there is no attendance to derive from. */
+          perDay: totals.days > 0
+            ? totals.gross / totals.days
+            : perDaySalary(emp.rate, emp.shift),
           gross: totals.gross,
           incentive: totals.incentive,
           deductions: totals.deductions,
