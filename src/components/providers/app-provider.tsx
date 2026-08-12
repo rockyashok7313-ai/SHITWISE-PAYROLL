@@ -25,6 +25,7 @@ interface AppContextType {
   employees: any[];
   attendance: any[];
   vouchers: any[];
+  loans: any[];
   loading: boolean;
   saveStatus: SaveStatus;
   /** Why the last cloud save failed, if it did. */
@@ -37,6 +38,8 @@ interface AppContextType {
   handleCreateVoucher: (voucher: any) => Promise<void>;
   handleUpdateVoucher: (id: string, updates: any) => Promise<void>;
   handleDeleteVoucher: (id: string) => Promise<void>;
+  handleCreateLoan: (loan: any) => Promise<void>;
+  handleDeleteLoan: (id: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -68,6 +71,30 @@ const rowToVoucher = (r: any) => ({
   date: r.date,
   amount: r.amount,
   paymentMethod: r.payment_method,
+  remarks: r.remarks || "",
+  updatedAt: r.updated_at || null,
+  deletedAt: r.deleted_at || null,
+});
+
+/* Loans. Repayments are NOT stored here -- they are the `loan` deductions
+ * already recorded on attendance, and the outstanding balance is derived from
+ * the two (see lib/loans). Requires migration 0009. */
+const loanToRow = (l: any, companyId: string) => ({
+  id: l.id,
+  company_id: companyId,
+  employee_id: l.employeeId,
+  amount: Number(l.amount) || 0,
+  issue_date: l.issueDate || null,
+  remarks: l.remarks || null,
+  updated_at: l.updatedAt || new Date().toISOString(),
+  deleted_at: l.deletedAt || null,
+});
+
+const rowToLoan = (r: any) => ({
+  id: r.id,
+  employeeId: r.employee_id,
+  amount: r.amount,
+  issueDate: r.issue_date,
   remarks: r.remarks || "",
   updatedAt: r.updated_at || null,
   deletedAt: r.deleted_at || null,
@@ -169,6 +196,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
+  const [loans, setLoans] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -441,6 +469,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (error) console.error("Supabase upsert vouchers error:", error);
         }
       }
+
+      // Loans. Same merge model as everything else.
+      const { data: dbLoans, error: loanErr } = await supabase.from('loans').select('*').eq('company_id', activeId);
+      const localLoansString = localStorage.getItem(`loans_${activeId}`);
+      const localLoans = localLoansString ? (JSON.parse(localLoansString) || []) : [];
+      if (loanErr || !dbLoans) {
+        setLoans(localLoans);
+      } else {
+        const remoteLoans = dbLoans.map(rowToLoan);
+        const mergedLoans = mergeById(localLoans, remoteLoans);
+        setLoans(mergedLoans);
+        localStorage.setItem(`loans_${activeId}`, JSON.stringify(mergedLoans));
+        const loansToPush = recordsToPush(mergedLoans, remoteLoans);
+        if (loansToPush.length > 0) {
+          const { error } = await supabase.from('loans').upsert(loansToPush.map((l: any) => loanToRow(l, activeId)));
+          if (error) console.error("Supabase upsert loans error:", error);
+        }
+      }
+
       // Second checkpoint: after a full successful sync, so the backup captures
       // the freshest merged data rather than whatever was cached before this
       // load if that happens to be more current. Throttled the same as the
@@ -532,6 +579,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { error } = await supabase.from('vouchers').upsert(toPush.map((v: any) => voucherToRow(v, id)));
         if (error) console.error("Supabase upsert vouchers error:", error);
       }
+    }
+
+    // Loans for the newly selected company.
+    const { data: dbLoans, error: loanErr } = await supabase.from('loans').select('*').eq('company_id', id);
+    const localLoansString = localStorage.getItem(`loans_${id}`);
+    const localLoans = localLoansString ? (JSON.parse(localLoansString) || []) : [];
+    if (loanErr || !dbLoans) {
+      setLoans(localLoans);
+    } else {
+      const mergedLoans = mergeById(localLoans, dbLoans.map(rowToLoan));
+      setLoans(mergedLoans);
+      localStorage.setItem(`loans_${id}`, JSON.stringify(mergedLoans));
     }
 
     setLoading(false);
@@ -705,6 +764,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /* Loans. Only issuing and cancelling live here -- repayments are the `loan`
+   * deductions already entered on attendance, so there is no separate repay
+   * handler and no second source of truth to drift. */
+  const handleCreateLoan = async (loan: any) => {
+    if (isAccountant) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
+      return;
+    }
+    if (!activeCompanyId) return;
+    const now = new Date().toISOString();
+    const newLoan = {
+      ...loan,
+      id: `loan_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      updatedAt: now,
+      deletedAt: null,
+    };
+    const updated = [newLoan, ...loans];
+    setLoans(updated);
+    localStorage.setItem(`loans_${activeCompanyId}`, JSON.stringify(updated));
+    maybeAutoBackup();
+
+    markSaving();
+    const { error } = await supabase.from('loans').insert([loanToRow(newLoan, activeCompanyId)]);
+    if (error) { console.error("Supabase insert loan error:", error); markSaveError(error); return; }
+    markSaved();
+  };
+
+  const handleDeleteLoan = async (id: string) => {
+    if (isAccountant) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
+      return;
+    }
+    if (!activeCompanyId) return;
+    // Soft delete, same as vouchers, so the removal propagates between devices.
+    const now = new Date().toISOString();
+    const updated = loans.map((l: any) => l.id === id ? { ...l, deletedAt: now, updatedAt: now } : l);
+    setLoans(updated);
+    localStorage.setItem(`loans_${activeCompanyId}`, JSON.stringify(updated));
+    maybeAutoBackup();
+
+    markSaving();
+    const { error } = await supabase.from('loans').update({ deleted_at: now, updated_at: now }).eq('id', id);
+    if (error) { console.error("Supabase delete loan error:", error); markSaveError(error); return; }
+    markSaved();
+  };
+
   const handleDeleteVoucher = async (id: string) => {
     if (isAccountant) {
       toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
@@ -742,6 +847,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const visibleEmployees = useMemo(() => liveRecords(employees), [employees]);
   const visibleAttendance = useMemo(() => liveRecords(attendance), [attendance]);
   const visibleVouchers = useMemo(() => liveRecords(vouchers), [vouchers]);
+  const visibleLoans = useMemo(() => liveRecords(loans), [loans]);
 
   return (
     <AppContext.Provider value={{
@@ -751,6 +857,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       employees: visibleEmployees,
       attendance: visibleAttendance,
       vouchers: visibleVouchers,
+      loans: visibleLoans,
       loading,
       saveStatus,
       saveError,
@@ -762,6 +869,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       handleCreateVoucher,
       handleUpdateVoucher,
       handleDeleteVoucher,
+      handleCreateLoan,
+      handleDeleteLoan,
     }}>
       {children}
     </AppContext.Provider>

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AppProvider } from "@/components/providers/app-provider";
-import { Clock, ShieldCheck, History as HistoryIcon, Users, FileSpreadsheet, LayoutDashboard, Settings, ReceiptText, LogOut } from "lucide-react";
+import { Clock, ShieldCheck, History as HistoryIcon, Users, FileSpreadsheet, LayoutDashboard, Settings, ReceiptText, LogOut, HandCoins } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,11 @@ const items = [
     title: "Vouchers",
     href: "/vouchers",
     icon: ReceiptText,
+  },
+  {
+    title: "Loans",
+    href: "/loans",
+    icon: HandCoins,
   },
   {
     title: "AI Audit",

@@ -6,6 +6,7 @@ import { paidEmployeeIds } from "@/lib/voucher-period";
 import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod, entryYearMonth } from "@/lib/attendance-period";
 import { defaultShiftForEmployee } from "@/lib/shift-rules";
 import { calculateEntryBreakdown } from "@/lib/payroll";
+import { loanBalanceFor } from "@/lib/loans";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,7 +76,7 @@ const getDefaultPayrollPeriod = () => currentPayrollPeriod();
 import { useAppContext } from "@/components/providers/app-provider";
 
 export function AttendanceLogger() {
-  const { activeCompanyId, config, employees, attendance, vouchers, handleAttendanceChange: onAttendanceChange } = useAppContext();
+  const { activeCompanyId, config, employees, attendance, vouchers, loans, handleAttendanceChange: onAttendanceChange } = useAppContext();
   const activeFinancialYear = config.financialYear;
   const { toast } = useToast();
   const { isAdmin, isSupervisor, isAccountant } = useRole(activeCompanyId);
@@ -101,6 +102,17 @@ export function AttendanceLogger() {
     weeklyAdvance: 0,
     loan: 0,
   });
+  /**
+   * Loan position for a labourer, as it stood BEFORE the row being edited.
+   *
+   * The row's own `loan` deduction is excluded (by id) so the balance answers
+   * "how much was still owed when I sat down to enter this month" rather than
+   * shifting under the supervisor's cursor as they type into Loan (-). What is
+   * left after this month's deduction is shown separately at each call site.
+   */
+  const loanBalanceExcludingRow = (employeeId: string, rowId?: string) =>
+    loanBalanceFor(employeeId, loans, (attendance || []).filter((a: any) => !rowId || a.id !== rowId));
+
   const [entries, setEntries] = useState<AttendanceRecord[]>([]);
   /** The last list received FROM the provider, compared by reference so the
    *  save effect never pushes back a list it did not originate. */
@@ -1059,9 +1071,9 @@ export function AttendanceLogger() {
                   <TableCell>
                     <div className="relative">
                       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-destructive font-bold">₹</span>
-                      <Input 
+                      <Input
                         type="number"
-                        value={entry.loan} 
+                        value={entry.loan}
                         disabled={!isEditing}
                         className="h-11 pl-6 bg-destructive/5 border-destructive/20 focus-visible:ring-destructive font-mono text-base font-bold text-destructive w-32"
                         onChange={(e) => {
@@ -1070,6 +1082,26 @@ export function AttendanceLogger() {
                         }}
                       />
                     </div>
+                    {/* Outstanding loan, so the deduction is entered against a
+                        visible balance instead of from memory. */}
+                    {(() => {
+                      const bal = loanBalanceExcludingRow(entry.employeeRefId || entry.id.split('-')[0], entry.id);
+                      if (bal.hasNoLoan) return null;
+                      const remaining = Math.max(0, bal.outstanding - (Number(entry.loan) || 0));
+                      return (
+                        <div className="mt-1 text-[10px] leading-tight font-mono w-32">
+                          <span className="text-muted-foreground">Owed </span>
+                          <span className="font-bold text-amber-600 dark:text-amber-500">
+                            ₹{bal.outstanding.toLocaleString('en-IN')}
+                          </span>
+                          {(Number(entry.loan) || 0) > 0 && (
+                            <span className={cn("block", remaining === 0 ? "text-emerald-600 dark:text-emerald-500 font-bold" : "text-muted-foreground")}>
+                              {remaining === 0 ? "→ closes loan" : `→ ₹${remaining.toLocaleString('en-IN')} left`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     <div className="font-mono text-sm text-muted-foreground">
@@ -1384,6 +1416,46 @@ export function AttendanceLogger() {
                   onChange={e => setNewEntryDetails(p => ({ ...p, loan: parseFloat(e.target.value) || 0 }))}
                 />
               </div>
+
+              {/* Outstanding loan for the selected labourer. Deliberately a
+                  read-out, not an auto-fill: the factory decides how much to
+                  recover each month, and the amount varies. */}
+              {newEntryEmployeeId && (() => {
+                const bal = loanBalanceExcludingRow(newEntryEmployeeId, editingDialogId ?? undefined);
+                if (bal.hasNoLoan) return null;
+                const taking = Number(newEntryDetails.loan) || 0;
+                const remaining = Math.max(0, bal.outstanding - taking);
+                return (
+                  <div className="col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-500">
+                        Loan Outstanding
+                      </span>
+                      <span className="font-mono text-lg font-black tabular-nums text-amber-600 dark:text-amber-500">
+                        ₹{bal.outstanding.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      ₹{bal.issued.toLocaleString('en-IN')} issued &middot; ₹{bal.repaid.toLocaleString('en-IN')} recovered
+                      {taking > 0 && (
+                        <>
+                          {' '}&middot;{' '}
+                          <span className={remaining === 0 ? "font-bold text-emerald-600 dark:text-emerald-500" : "font-bold"}>
+                            {remaining === 0
+                              ? "this deduction closes the loan"
+                              : `₹${remaining.toLocaleString('en-IN')} left after this deduction`}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    {taking > bal.outstanding && bal.outstanding > 0 && (
+                      <p className="mt-1 text-[11px] font-semibold text-destructive">
+                        This deducts ₹{(taking - bal.outstanding).toLocaleString('en-IN')} more than is owed.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Live payout preview -- the amount this entry will actually
                   pay, visible before saving. Same shared calculation the
