@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, Upload, DatabaseBackup } from "lucide-react";
+import { Download, Upload, DatabaseBackup, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   downloadBackupNow,
@@ -10,6 +10,7 @@ import {
   mergeBackupIntoStorage,
   readFileAsText,
   getLastBackupAt,
+  clearLocalTombstones,
 } from "@/lib/backup";
 
 /**
@@ -40,6 +41,34 @@ export function BackupRestorePanel({ className }: { className?: string }) {
       toast({ title: "Backup downloaded", description: filename });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Backup failed", description: e.message || "Could not create a backup." });
+    }
+  };
+
+  /**
+   * Clears deletion markers from the locally cached staff/attendance.
+   *
+   * The case this exists for: records are alive in Supabase, but this browser
+   * still holds tombstones from a bad delete. Tombstones are newer, so the
+   * merge keeps hiding rows that genuinely exist server-side and the screen
+   * stays empty however many times the cloud is repaired.
+   */
+  const handleRepair = () => {
+    try {
+      const { cleared } = clearLocalTombstones(window.localStorage);
+      if (cleared === 0) {
+        toast({
+          title: "Nothing to repair",
+          description: "No deleted records are being hidden on this device. If data is still missing, it is not this browser's cache causing it.",
+        });
+        return;
+      }
+      toast({
+        title: `Restored ${cleared} hidden record(s)`,
+        description: "Reloading to sync them...",
+      });
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Repair failed", description: e.message || "Could not repair local data." });
     }
   };
 
@@ -82,6 +111,16 @@ export function BackupRestorePanel({ className }: { className?: string }) {
           className="gap-2 justify-center"
         >
           <Upload className="w-3.5 h-3.5" /> {isRestoring ? "Restoring..." : "Restore From Backup File"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleRepair}
+          className="gap-2 justify-center"
+          title="Un-hide staff/attendance that this browser is holding as deleted"
+        >
+          <Wrench className="w-3.5 h-3.5" /> Show Missing Staff
         </Button>
         <input
           ref={fileInputRef}

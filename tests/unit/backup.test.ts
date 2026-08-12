@@ -9,6 +9,7 @@ import {
   getLastBackupAt,
   setLastBackupAt,
   DEFAULT_AUTO_BACKUP_INTERVAL_MS,
+  clearLocalTombstones,
 } from '../../src/lib/backup';
 
 /** In-memory stand-in for window.localStorage, matching StorageLike. */
@@ -204,5 +205,66 @@ describe('shouldAutoBackup (the throttle)', () => {
     expect(getLastBackupAt(s)).toBeNull();
     setLastBackupAt(s, T1);
     expect(getLastBackupAt(s)).toBe(T1);
+  });
+});
+
+describe('clearLocalTombstones (the "staff still missing" repair)', () => {
+  const NOW = '2027-06-01T00:00:00.000Z';
+
+  it('revives tombstoned employees and stamps them newer so they win the merge', () => {
+    const s = new FakeStorage();
+    s.setItem('employees_C1', JSON.stringify([
+      { id: 'E1', name: 'Asha', updatedAt: T1, deletedAt: T2 },
+      { id: 'E2', name: 'Ravi', updatedAt: T1, deletedAt: null },
+    ]));
+
+    const res = clearLocalTombstones(s, NOW);
+
+    expect(res.cleared).toBe(1);
+    const out = JSON.parse(s.getItem('employees_C1')!);
+    const revived = out.find((e: any) => e.id === 'E1');
+    expect(revived.deletedAt).toBeNull();
+    expect(revived.updatedAt).toBe(NOW); // newer, so the merge keeps it alive
+  });
+
+  it('leaves already-live records completely untouched', () => {
+    const s = new FakeStorage();
+    const original = [{ id: 'E2', name: 'Ravi', updatedAt: T1, deletedAt: null }];
+    s.setItem('employees_C1', JSON.stringify(original));
+
+    const res = clearLocalTombstones(s, NOW);
+
+    expect(res.cleared).toBe(0);
+    expect(JSON.parse(s.getItem('employees_C1')!)).toEqual(original);
+  });
+
+  it('repairs attendance as well as employees', () => {
+    const s = new FakeStorage();
+    s.setItem('attendance_C1', JSON.stringify([{ id: 'A1', updatedAt: T1, deletedAt: T2 }]));
+    expect(clearLocalTombstones(s, NOW).cleared).toBe(1);
+  });
+
+  it('NEVER touches vouchers -- those deletions are deliberate and audited', () => {
+    const s = new FakeStorage();
+    const vouchers = [{ id: 'V1', updatedAt: T1, deletedAt: T2 }];
+    s.setItem('vouchers_C1', JSON.stringify(vouchers));
+
+    const res = clearLocalTombstones(s, NOW);
+
+    expect(res.cleared).toBe(0);
+    expect(JSON.parse(s.getItem('vouchers_C1')!)).toEqual(vouchers); // untouched
+  });
+
+  it('can only revive -- it never removes a record', () => {
+    const s = new FakeStorage();
+    s.setItem('employees_C1', JSON.stringify([
+      { id: 'E1', deletedAt: T2 }, { id: 'E2' }, { id: 'E3', deletedAt: T2 },
+    ]));
+    clearLocalTombstones(s, NOW);
+    expect(JSON.parse(s.getItem('employees_C1')!)).toHaveLength(3);
+  });
+
+  it('is a no-op on empty storage', () => {
+    expect(clearLocalTombstones(new FakeStorage(), NOW)).toMatchObject({ cleared: 0 });
   });
 });

@@ -162,6 +162,65 @@ function safeArray(raw: string | null): any[] {
   }
 }
 
+export interface TombstoneRepairResult {
+  /** How many records had a deletion marker removed. */
+  cleared: number;
+  /** Per storage key, how many were revived. */
+  perKey: Record<string, number>;
+}
+
+/**
+ * Removes deletion markers from the locally cached records.
+ *
+ * WHY THIS EXISTS: sync resolves each record by newest `updatedAt`, and a
+ * tombstone wins over an older live copy. If a browser holds tombstones from
+ * a bad delete (see the Staff Management stale-save bug), those tombstones
+ * are newer than the records restored to the cloud -- so the merge keeps
+ * hiding staff that genuinely exist server-side, and the screen stays empty
+ * no matter how many times the cloud is fixed.
+ *
+ * This clears them locally and stamps `updatedAt` to now, so the revived
+ * records win the next merge instead of being re-hidden.
+ *
+ * Only ever REVIVES records -- it cannot delete anything. Vouchers are
+ * deliberately excluded: voucher deletions are real user actions recorded in
+ * the audit trail, and blanket-reviving them would resurrect payments that
+ * were removed on purpose.
+ */
+export function clearLocalTombstones(
+  storage: StorageLike,
+  now: string = new Date().toISOString()
+): TombstoneRepairResult {
+  const perKey: Record<string, number> = {};
+  let cleared = 0;
+
+  const keys: string[] = [];
+  for (let i = 0; i < storage.length; i++) {
+    const k = storage.key(i);
+    if (k && (k.startsWith('employees_') || k.startsWith('attendance_'))) keys.push(k);
+  }
+
+  for (const key of keys) {
+    const list = safeArray(storage.getItem(key));
+    if (!list.length) continue;
+
+    let count = 0;
+    const revived = list.map((r: any) => {
+      if (!r || !r.deletedAt) return r;
+      count++;
+      return { ...r, deletedAt: null, updatedAt: now };
+    });
+
+    if (count > 0) {
+      storage.setItem(key, JSON.stringify(revived));
+      perKey[key] = count;
+      cleared += count;
+    }
+  }
+
+  return { cleared, perKey };
+}
+
 /* ------------------------------------------------------------------ */
 /* Throttle: how often an automatic backup is allowed to fire.         */
 /* ------------------------------------------------------------------ */
