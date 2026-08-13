@@ -7,7 +7,7 @@ import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod, entryYearMont
 import { defaultShiftForEmployee } from "@/lib/shift-rules";
 import { calculateEntryBreakdown, perDaySalary } from "@/lib/payroll";
 import { loanBalanceFor } from "@/lib/loans";
-import { refreshEntryLabelsAll, hasRateDrift } from "@/lib/wage-snapshot";
+import { refreshEntryLabelsAll, hasRateDrift, previousRateFor } from "@/lib/wage-snapshot";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -102,6 +102,8 @@ export function AttendanceLogger() {
     incentive: 0,
     weeklyAdvance: 0,
     loan: 0,
+    /** Per-hour wage this row is entered at -- snapshotted onto the record. */
+    rate: 0,
   });
   /**
    * Loan position for a labourer, as it stood BEFORE the row being edited.
@@ -563,12 +565,38 @@ export function AttendanceLogger() {
     const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
     const emp = roster.find((e: any) => e.id === empId);
     if (!emp) return;
-    setNewEntryDetails(p => ({ ...p, shift: defaultShiftForEmployee(emp as any) }));
+    // Default to the labourer's CURRENT wage. If they were on a different one
+    // before, the picker below offers it -- defaulting to the older figure
+    // instead would silently underpay anyone entered for the current month.
+    setNewEntryDetails(p => ({
+      ...p,
+      shift: defaultShiftForEmployee(emp as any),
+      rate: Number(emp.rate) || 0,
+    }));
   };
 
   /** The employee currently chosen in the dialog, for the auto-shift hint. */
   const selectedDialogEmployee = (employees && employees.length > 0 ? employees : EMPLOYEES)
     .find((e: any) => e.id === newEntryEmployeeId) as any;
+
+  /**
+   * The wage this labourer was on before their current one, if any, taken
+   * from their own attendance history (see @/lib/wage-snapshot).
+   *
+   * This screen defaults to entering the PREVIOUS month, but a new row
+   * snapshots the CURRENT rate -- so straight after an increment, last
+   * month's attendance would be priced at this month's wage. The picker lets
+   * the supervisor say which one this period was actually worked at.
+   */
+  const previousWage = useMemo(
+    () => selectedDialogEmployee
+      ? previousRateFor(selectedDialogEmployee.id, attendance || [], selectedDialogEmployee.rate)
+      : null,
+    [selectedDialogEmployee, attendance]
+  );
+
+  /** The rate the dialog is currently set to apply. */
+  const dialogRate = Number(newEntryDetails.rate) || Number(selectedDialogEmployee?.rate) || 0;
 
   /**
    * Live payout preview for what is currently typed into the dialog, so the
@@ -582,16 +610,17 @@ export function AttendanceLogger() {
    */
   const dialogPreview = useMemo(() => {
     if (!selectedDialogEmployee) return null;
+    const rate = Number(newEntryDetails.rate) || Number(selectedDialogEmployee.rate) || 0;
     return calculateEntryBreakdown(
       {
         hours: Number(newEntryDetails.hours) || 0,
-        rate: selectedDialogEmployee.rate,
+        rate,
         shift: newEntryDetails.shift,
         incentive: Number(newEntryDetails.incentive) || 0,
         weeklyAdvance: Number(newEntryDetails.weeklyAdvance) || 0,
         loan: Number(newEntryDetails.loan) || 0,
       },
-      { rate: selectedDialogEmployee.rate, shift: selectedDialogEmployee.shift }
+      { rate, shift: selectedDialogEmployee.shift }
     );
   }, [selectedDialogEmployee, newEntryDetails]);
 
@@ -646,6 +675,9 @@ export function AttendanceLogger() {
         incentive: newEntryDetails.incentive,
         weeklyAdvance: newEntryDetails.weeklyAdvance,
         loan: newEntryDetails.loan,
+        // The wage picker applies on edit too, so a row entered at the wrong
+        // rate can be corrected. Falls back to the row's existing snapshot.
+        rate: Number(newEntryDetails.rate) || item.rate,
         isModified: true
       } : item));
       toast({
@@ -665,6 +697,10 @@ export function AttendanceLogger() {
         incentive: newEntryDetails.incentive,
         weeklyAdvance: newEntryDetails.weeklyAdvance,
         loan: newEntryDetails.loan,
+        // Snapshot the CHOSEN wage, which may be the labourer's previous one
+        // when this row is for a period worked before an increment. `...emp`
+        // above would otherwise stamp today's rate onto an older month.
+        rate: Number(newEntryDetails.rate) || Number(emp.rate) || 0,
         isModified: true
       };
       setEntries(prev => [newEntry, ...prev]);
@@ -800,6 +836,8 @@ export function AttendanceLogger() {
                 incentive: 0,
                 weeklyAdvance: 0,
                 loan: 0,
+                // Set when a labourer is picked; 0 falls back to their rate.
+                rate: 0,
               });
               setNewEntryEmployeeId("");
               setIsAddDialogOpen(true);
@@ -1178,7 +1216,10 @@ export function AttendanceLogger() {
                               totalWage: "",
                               incentive: entry.incentive,
                               weeklyAdvance: entry.weeklyAdvance,
-                              loan: entry.loan
+                              loan: entry.loan,
+                              // Open on the wage this row was actually worked
+                              // at, not the labourer's current one.
+                              rate: entry.rate
                             });
                             setIsAddDialogOpen(true);
                           }}
@@ -1367,11 +1408,44 @@ export function AttendanceLogger() {
                 )}
               </div>
 
+              {/* Which wage this period was worked at.
+                  Only appears when there IS an older wage to choose -- an
+                  always-present picker would be one more thing to get wrong on
+                  the majority of entries where the rate never changed. */}
+              {selectedDialogEmployee && previousWage && (
+                <div className="col-span-2 flex flex-col gap-2">
+                  <label className="text-sm font-semibold text-accent">Salary applied to this period</label>
+                  <Select
+                    value={String(dialogRate)}
+                    onValueChange={v => setNewEntryDetails(p => ({ ...p, rate: Number(v) || 0 }))}
+                  >
+                    <SelectTrigger className="bg-accent/5 border-accent/30 font-bold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={String(Number(selectedDialogEmployee.rate) || 0)}>
+                        New salary &mdash; ₹{Math.round(perDaySalary(selectedDialogEmployee.rate, newEntryDetails.shift)).toLocaleString('en-IN')}/day
+                      </SelectItem>
+                      <SelectItem value={String(previousWage.rate)}>
+                        Old salary &mdash; ₹{Math.round(perDaySalary(previousWage.rate, newEntryDetails.shift)).toLocaleString('en-IN')}/day
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    {previousWage.date
+                      ? <>Last paid at the old salary on <span className="font-semibold">{previousWage.date}</span>. </>
+                      : null}
+                    Pick the salary that was in force for the month you are entering &mdash; it is saved onto this
+                    row and later wage changes will not alter it.
+                  </p>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold">Clock In</label>
-                <Input 
-                  type="time" 
-                  value={newEntryDetails.clockIn} 
+                <Input
+                  type="time"
+                  value={newEntryDetails.clockIn}
                   onChange={e => setNewEntryDetails(p => ({ ...p, clockIn: e.target.value }))}
                 />
               </div>
@@ -1396,12 +1470,17 @@ export function AttendanceLogger() {
                     const amount = parseFloat(val) || 0;
                     const currentEmployees = employees && employees.length > 0 ? employees : EMPLOYEES;
                     const emp = currentEmployees.find((e: any) => e.id === newEntryEmployeeId);
-                    
+
                     setNewEntryDetails(p => {
                       let computedHours = p.hours;
-                      if (emp && emp.rate > 0 && amount > 0) {
+                      // Back out the day count using the rate THIS row is set
+                      // to, not the employee's current one -- otherwise a total
+                      // wage typed against the old salary would be converted at
+                      // the new one and produce the wrong number of days.
+                      const rate = Number(p.rate) || Number(emp?.rate) || 0;
+                      if (rate > 0 && amount > 0) {
                         const shiftHrs = p.shift === '12-hour' ? 12 : 9;
-                        computedHours = parseFloat((amount / (emp.rate * shiftHrs)).toFixed(2));
+                        computedHours = parseFloat((amount / (rate * shiftHrs)).toFixed(2));
                       }
                       return { ...p, totalWage: val, hours: computedHours };
                     });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refreshEntryLabels, hasRateDrift, refreshEntryLabelsAll } from '../../src/lib/wage-snapshot';
+import { refreshEntryLabels, hasRateDrift, refreshEntryLabelsAll, previousRateFor } from '../../src/lib/wage-snapshot';
 import { calculateEntryBreakdown, perDaySalary } from '../../src/lib/payroll';
 
 // The real numbers from the factory: Rs.620/day on a 12-hour shift, plus a
@@ -107,6 +107,76 @@ describe('hasRateDrift', () => {
   it('is false when the employee has no usable rate', () => {
     expect(hasRateDrift({ rate: OLD_RATE }, { rate: 0 })).toBe(false);
     expect(hasRateDrift({ rate: OLD_RATE }, undefined)).toBe(false);
+  });
+});
+
+describe('previousRateFor', () => {
+  it('offers the rate from the most recent differently-priced row', () => {
+    const prev = previousRateFor('E1', [
+      { employeeRefId: 'E1', date: '2026-05-14', rate: OLD_RATE, shift: '12-hour' },
+      { employeeRefId: 'E1', date: '2026-06-14', rate: OLD_RATE, shift: '12-hour' },
+    ], NEW_RATE);
+    expect(prev).toMatchObject({ rate: OLD_RATE, date: '2026-06-14', shift: '12-hour' });
+  });
+
+  it('returns null when every row is already on the current rate', () => {
+    expect(previousRateFor('E1', [
+      { employeeRefId: 'E1', date: '2026-06-14', rate: NEW_RATE },
+    ], NEW_RATE)).toBeNull();
+  });
+
+  it('returns null when the labourer has no attendance at all', () => {
+    expect(previousRateFor('E1', [], NEW_RATE)).toBeNull();
+    expect(previousRateFor('E1', undefined, NEW_RATE)).toBeNull();
+  });
+
+  it('picks the newest older rate when the wage changed more than once', () => {
+    const OLDEST = 500 / 12;
+    const prev = previousRateFor('E1', [
+      { employeeRefId: 'E1', date: '2026-04-14', rate: OLDEST },
+      { employeeRefId: 'E1', date: '2026-06-14', rate: OLD_RATE },
+      { employeeRefId: 'E1', date: '2026-05-14', rate: OLDEST },
+    ], NEW_RATE);
+    expect(prev!.rate).toBe(OLD_RATE);
+    expect(prev!.date).toBe('2026-06-14');
+  });
+
+  it('ignores other labourers entirely', () => {
+    const prev = previousRateFor('E1', [
+      { employeeRefId: 'E2', date: '2026-07-14', rate: 999 },
+      { employeeRefId: 'E1', date: '2026-06-14', rate: OLD_RATE },
+    ], NEW_RATE);
+    expect(prev!.rate).toBe(OLD_RATE);
+  });
+
+  it('matches rows by the id prefix when employeeRefId is missing', () => {
+    const prev = previousRateFor('E1', [
+      { id: 'E1-1784007777769', date: '2026-06-14', rate: OLD_RATE },
+    ], NEW_RATE);
+    expect(prev!.rate).toBe(OLD_RATE);
+  });
+
+  it('skips rows with no usable rate rather than offering zero', () => {
+    const prev = previousRateFor('E1', [
+      { employeeRefId: 'E1', date: '2026-07-14', rate: 0 },
+      { employeeRefId: 'E1', date: '2026-06-14', rate: OLD_RATE },
+    ], NEW_RATE);
+    expect(prev!.rate).toBe(OLD_RATE);
+  });
+
+  it('does not let an undated row outrank a dated one', () => {
+    const prev = previousRateFor('E1', [
+      { employeeRefId: 'E1', rate: 111 },
+      { employeeRefId: 'E1', date: '2026-06-14', rate: OLD_RATE },
+    ], NEW_RATE);
+    expect(prev!.rate).toBe(OLD_RATE);
+  });
+
+  it('still offers a rate when the employee has no current rate set', () => {
+    const prev = previousRateFor('E1', [
+      { employeeRefId: 'E1', date: '2026-06-14', rate: OLD_RATE },
+    ], undefined);
+    expect(prev!.rate).toBe(OLD_RATE);
   });
 });
 

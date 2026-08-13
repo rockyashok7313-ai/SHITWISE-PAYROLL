@@ -87,6 +87,76 @@ export function hasRateDrift(entry: WageEntry, employee?: WageEmployee | null): 
   return entryRate !== currentRate;
 }
 
+/* ------------------------------------------------------------------ */
+/* Choosing which wage a new row is entered at                         */
+/* ------------------------------------------------------------------ */
+
+export interface RatedEntry {
+  employeeRefId?: string;
+  id?: string;
+  date?: string;
+  rate?: number;
+  shift?: string;
+}
+
+export interface PreviousRate {
+  /** The per-hour rate this labourer was previously paid at. */
+  rate: number;
+  /** The date of the row it came from, so the UI can name the period. */
+  date?: string;
+  /** That row's shift -- the per-day figure depends on it. */
+  shift?: string;
+}
+
+/** Rows belonging to one employee, matching the app's usual id fallback. */
+function belongsTo(entry: RatedEntry, employeeId: string): boolean {
+  if (entry.employeeRefId) return entry.employeeRefId === employeeId;
+  if (entry.id === employeeId) return true;
+  return !!entry.id && entry.id.split("-")[0] === employeeId;
+}
+
+/**
+ * The wage this labourer was on BEFORE their current one, taken from the most
+ * recent attendance row that was priced differently.
+ *
+ * There is no wage-history table, and there does not need to be: every
+ * attendance row already carries the rate it was worked at, so the last row
+ * priced differently IS the previous wage, dated. That keeps a single source
+ * of truth rather than a second table to drift out of step.
+ *
+ * Why it matters: the attendance screen defaults to the PREVIOUS month (the
+ * factory enters arrears), while a new row snapshots the employee's CURRENT
+ * rate. Straight after an increment those disagree -- last month's attendance
+ * would be entered at this month's wage. This gives the supervisor the older
+ * figure to choose instead.
+ *
+ * Returns null when there is nothing older to offer.
+ */
+export function previousRateFor(
+  employeeId: string,
+  entries: RatedEntry[] | undefined,
+  currentRate: number | undefined
+): PreviousRate | null {
+  const current = Number(currentRate);
+  const candidates = (entries ?? [])
+    .filter(e => belongsTo(e, employeeId))
+    .filter(e => {
+      const r = Number(e.rate);
+      return Number.isFinite(r) && r > 0 && r !== current;
+    });
+
+  if (candidates.length === 0) return null;
+
+  // Most recent first. Dates are YYYY-MM-DD (sometimes a "from to to" range),
+  // so a plain string compare orders them correctly; rows without a date sort
+  // last rather than winning by accident.
+  const newest = candidates.reduce((best, e) =>
+    (e.date || "") > (best.date || "") ? e : best
+  );
+
+  return { rate: Number(newest.rate), date: newest.date, shift: newest.shift };
+}
+
 /**
  * Refreshes labels across a whole set, preserving array identity when no row
  * changed. The attendance screen holds the full canonical set (every month) in
