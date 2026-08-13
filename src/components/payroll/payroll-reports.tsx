@@ -42,6 +42,20 @@ import {
 import { sumIncludedMonths, isHandEdited } from "@/lib/bonus-migration";
 import { paidEmployeeIds, paidByMethod, type PaymentMethod } from "@/lib/voucher-period";
 
+/**
+ * Rupees with paise, always two decimals: 12,345.00.
+ *
+ * Every money figure on this screen and in the exported statement goes through
+ * this, so the decimal points line up down a column and the printed report
+ * cannot disagree with what is on screen. Day counts do NOT use it -- they are
+ * a quantity, not an amount.
+ */
+const rupees = (n: number) =>
+  (Number(n) || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
   { month: "Feb", cost: 138000 },
@@ -657,23 +671,23 @@ export function PayrollReports() {
       const columns = (isPaymentReport
         ? [
             { key: "id",         label: "ID",         width: 18, align: "left"  },
-            { key: "name",       label: "Name",       width: 56, align: "left"  },
-            { key: "role",       label: "Role",       width: 40, align: "left"  },
+            { key: "name",       label: "Name",       width: 54, align: "left"  },
+            { key: "role",       label: "Role",       width: 36, align: "left"  },
             { key: "days",       label: "Days",       width: 15, align: "right" },
             { key: "perDay",     label: "Per Day",    width: 19, align: "right" },
-            { key: "gross",      label: "Gross",      width: 22, align: "right" },
+            { key: "gross",      label: "Gross",      width: 25, align: "right" },
             { key: "incentive",  label: "Incent.",    width: 21, align: "right" },
             { key: "deductions", label: "Deductions", width: 24, align: "right" },
             { key: "net",        label: "Net Payout", width: 30, align: "right" },
-            { key: "paid",       label: `${statusFilter} Paid`, width: 22, align: "right" },
+            { key: "paid",       label: `${statusFilter} Paid`, width: 25, align: "right" },
           ]
         : [
             { key: "id",         label: "ID",         width: 18, align: "left"  },
-            { key: "name",       label: "Name",       width: 62, align: "left"  },
+            { key: "name",       label: "Name",       width: 60, align: "left"  },
             { key: "role",       label: "Role",       width: 46, align: "left"  },
             { key: "days",       label: "Days",       width: 15, align: "right" },
             { key: "perDay",     label: "Per Day",    width: 20, align: "right" },
-            { key: "gross",      label: "Gross",      width: 23, align: "right" },
+            { key: "gross",      label: "Gross",      width: 25, align: "right" },
             { key: "incentive",  label: "Incent.",    width: 22, align: "right" },
             { key: "deductions", label: "Deductions", width: 25, align: "right" },
             { key: "net",        label: "Net Payout", width: 36, align: "right" },
@@ -740,8 +754,9 @@ export function PayrollReports() {
         pdf.text(shown, xOf(key), y, { align: alignOf(key) });
       };
 
-      /** Whole rupees -- the register has no room for paise on every column. */
-      const money = (n: number) => Math.round(n).toLocaleString("en-IN");
+      /** Money in the statement uses the same formatter as the screen, so the
+       *  printed report can never disagree with the table it came from. */
+      const money = rupees;
       
       /* Table head: reversed out of the same band colour as the masthead, so
        * the header reads as part of the document rather than a grey strip. */
@@ -1483,10 +1498,10 @@ Please contact HR if you have any questions.`;
                         <td className="p-4 font-mono text-muted-foreground">{row.id}</td>
                         <td className="p-4 font-bold">{row.name}</td>
                         <td className="p-4 text-center font-mono">{row.daysWorked}</td>
-                        <td className="p-4 text-right font-mono text-muted-foreground">₹{row.gross.toLocaleString('en-IN')}</td>
-                        <td className="p-4 text-right font-mono text-green-500">₹{row.incentive.toLocaleString('en-IN')}</td>
-                        <td className="p-4 text-right font-mono text-destructive">₹{row.deductions.toLocaleString('en-IN')}</td>
-                        <td className="p-4 text-right font-headline font-black text-accent">₹{row.net.toLocaleString('en-IN')}</td>
+                        <td className="p-4 text-right font-mono text-muted-foreground">₹{rupees(row.gross)}</td>
+                        <td className="p-4 text-right font-mono text-green-500">₹{rupees(row.incentive)}</td>
+                        <td className="p-4 text-right font-mono text-destructive">₹{rupees(row.deductions)}</td>
+                        <td className="p-4 text-right font-headline font-black text-accent">₹{rupees(row.net)}</td>
                         <td className="p-4 text-center no-print">
                           {/* Derived from voucher existence -- read-only. To mark
                               Paid, generate a voucher on the Vouchers screen. */}
@@ -1512,23 +1527,23 @@ Please contact HR if you have any questions.`;
                     <tr>
                       <td colSpan={2} className="p-4 text-accent uppercase tracking-tighter">Total Monthly Liability</td>
                       <td className="p-4 text-center">{reportData.reduce((a, b) => a + b.daysWorked, 0)} Total Days</td>
-                      <td className="p-4 text-right">₹{reportData.reduce((a, b) => a + b.gross, 0).toLocaleString('en-IN')}</td>
-                      <td className="p-4 text-right text-green-500">₹{reportData.reduce((a, b) => a + b.incentive, 0).toLocaleString('en-IN')}</td>
-                      <td className="p-4 text-right text-destructive">₹{reportData.reduce((a, b) => a + b.deductions, 0).toLocaleString('en-IN')}</td>
-                      <td className="p-4 text-right text-accent text-lg">₹{reportData.reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}</td>
+                      <td className="p-4 text-right">₹{rupees(reportData.reduce((a, b) => a + b.gross, 0))}</td>
+                      <td className="p-4 text-right text-green-500">₹{rupees(reportData.reduce((a, b) => a + b.incentive, 0))}</td>
+                      <td className="p-4 text-right text-destructive">₹{rupees(reportData.reduce((a, b) => a + b.deductions, 0))}</td>
+                      <td className="p-4 text-right text-accent text-lg">₹{rupees(reportData.reduce((a, b) => a + b.net, 0))}</td>
                       <td className="p-4 no-print"></td>
                     </tr>
                     <tr className="bg-green-500/10 border-t border-green-500/20">
                       <td colSpan={6} className="p-3 text-right text-green-700 uppercase text-xs font-bold tracking-wider">Total Paid Salary</td>
                       <td className="p-3 text-right text-green-700 font-headline font-black text-lg">
-                        ₹{reportData.filter(r => isPaid(r.id)).reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
+                        ₹{rupees(reportData.filter(r => isPaid(r.id)).reduce((a, b) => a + b.net, 0))}
                       </td>
                       <td className="no-print"></td>
                     </tr>
                     <tr className="bg-destructive/10 border-t border-destructive/20">
                       <td colSpan={6} className="p-3 text-right text-destructive uppercase text-xs font-bold tracking-wider">Total Unpaid Salary</td>
                       <td className="p-3 text-right text-destructive font-headline font-black text-lg">
-                        ₹{reportData.filter(r => !isPaid(r.id)).reduce((a, b) => a + b.net, 0).toLocaleString('en-IN')}
+                        ₹{rupees(reportData.filter(r => !isPaid(r.id)).reduce((a, b) => a + b.net, 0))}
                       </td>
                       <td className="no-print"></td>
                     </tr>
