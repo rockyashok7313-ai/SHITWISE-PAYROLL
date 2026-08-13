@@ -538,53 +538,81 @@ export function PayrollReports() {
       }
       
       const pdf = new jsPDF("l", "mm", "a4");
-      
-      pdf.setFont("helvetica", "normal");
-      
-      // Header Accent Band
-      pdf.setFillColor(31, 41, 55); 
-      pdf.rect(15, 15, 267, 8, "F");
-      
-      // Title
-      pdf.setFontSize(18);
-      pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(31, 41, 55);
+
+      /* ---- Type and palette --------------------------------------------
+       *
+       * ONE typeface, ONE weight, everywhere: helvetica bold. The statement
+       * used to mix helvetica for text with courier for figures and normal
+       * with bold within a line, which read as three different documents
+       * stitched together.
+       *
+       * Losing courier costs nothing here. It was presumably chosen for
+       * monospaced digit alignment, but every figure column is RIGHT-aligned,
+       * so the digits line up on the right edge regardless -- and helvetica
+       * bold is actually narrower for the same figure (13.2mm vs 16.2mm for
+       * "54,16,666" at 8.5pt), which buys width for the Name column.
+       */
+      const FONT = "helvetica";
+      const type = (size: number) => { pdf.setFont(FONT, "bold"); pdf.setFontSize(size); };
+
+      const INK      = [17, 24, 39] as const;    // near-black, body text
+      const INK_SOFT = [107, 114, 128] as const; // labels
+      const PAPER    = [255, 255, 255] as const;
+      const BAND     = [17, 24, 39] as const;    // title + table head + totals
+      const ZEBRA    = [248, 250, 252] as const;
+      const RULE     = [226, 232, 240] as const;
+      const ACCENT   = [16, 185, 129] as const;
+
+      const setInk = (c: readonly number[]) => pdf.setTextColor(c[0], c[1], c[2]);
+      const setFill = (c: readonly number[]) => pdf.setFillColor(c[0], c[1], c[2]);
+      const setRule = (c: readonly number[]) => pdf.setDrawColor(c[0], c[1], c[2]);
+
       const title = isPaymentReport
         ? `${statusFilter!.toUpperCase()} PAID REPORT`
         : statusFilter
           ? `${statusFilter.toUpperCase()} SALARY REPORT`
           : "MONTHLY PAYROLL SUMMARY";
-      pdf.text(title, 15, 32);
-      
-      // Metadata
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("REPORT MONTH:", 15, 42);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(`${selectedMonth} ${selectedYear}`, 48, 42);
-      
-      pdf.setFont("helvetica", "bold");
-      pdf.text("FINANCIAL YEAR:", 15, 47);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(activeFinancialYear, 48, 47);
 
-      pdf.setFont("helvetica", "bold");
-      pdf.text("TOTAL STAFF:", 180, 42);
-      pdf.setFont("helvetica", "normal");
-      pdf.text(String(exportEntries.length), 220, 42);
-      
-      pdf.setFont("helvetica", "bold");
-      pdf.text(isPaymentReport ? "PAID VIA:" : "STATUS:", 180, 47);
-      pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(16, 185, 129);
-      pdf.text(isPaymentReport ? statusFilter!.toUpperCase() : "FINALIZED", 200, 47);
-      pdf.setTextColor(31, 41, 55);
-      
-      // Divider
-      pdf.setDrawColor(229, 231, 235);
-      pdf.setLineWidth(0.5);
-      pdf.line(15, 52, 282, 52);
-      
+      /* ---- Masthead -----------------------------------------------------
+       * A solid band with the title reversed out of it, and the period set
+       * against the right edge. Replaces a thin decorative bar that sat above
+       * unrelated black text and did not tie to anything. */
+      setFill(BAND);
+      pdf.rect(15, 15, 267, 16, "F");
+
+      type(15);
+      setInk(PAPER);
+      pdf.text(title, 20, 25.5);
+
+      type(10);
+      pdf.text(`${selectedMonth.toUpperCase()} ${selectedYear}`, 277, 25.5, { align: "right" });
+
+      /* ---- Meta strip ---------------------------------------------------
+       * Label above value, in four columns across a light card -- scannable,
+       * and it keeps the labels from colliding with long values the way the
+       * old fixed x-offsets (label at 15, value at 48) did. */
+      setFill([248, 250, 252]);
+      setRule(RULE);
+      pdf.setLineWidth(0.3);
+      pdf.rect(15, 31, 267, 14, "FD");
+
+      const meta: Array<{ label: string; value: string; accent?: boolean }> = [
+        { label: "FINANCIAL YEAR", value: activeFinancialYear },
+        { label: "TOTAL STAFF", value: String(exportEntries.length) },
+        { label: isPaymentReport ? "PAID VIA" : "STATUS",
+          value: isPaymentReport ? statusFilter!.toUpperCase() : "FINALIZED", accent: true },
+        { label: "GENERATED", value: new Date().toLocaleDateString("en-IN") },
+      ];
+      meta.forEach((m, i) => {
+        const x = 20 + i * 66;
+        type(6.5);
+        setInk(INK_SOFT);
+        pdf.text(m.label, x, 36.5);
+        type(10);
+        setInk(m.accent ? ACCENT : INK);
+        pdf.text(m.value, x, 42);
+      });
+
       let pageNumber = 1;
 
       /* ---- Table column model ------------------------------------------
@@ -614,29 +642,41 @@ export function PayrollReports() {
        * total at TABLE_WIDTH. Net Payout stays -- the gap between what was
        * earned and what was paid is the whole point of handing this to an
        * accountant. */
+      /* Widths are sized from MEASURED content, not guessed. The figure
+       * columns were far wider than they need: the widest realistic amount
+       * ("54,16,666") is 16.2mm in courier 8.5pt and the widest header
+       * ("Deductions") 16.3mm, so ~21mm covers them with padding -- they were
+       * carrying 33-42mm. That slack now goes to Name, which needs 47.3mm for
+       * the longest name on the roster ("SANTHOSH KOMBAKKADU-7972") at full
+       * size. Name and Role are drawn with a shrink-to-fit font, so a name
+       * longer than any currently on the roster still prints in full.
+       *
+       * A payment report adds a 10th column, so every other column gives up a
+       * little; the assertion below keeps the total at TABLE_WIDTH either way.
+       */
       const columns = (isPaymentReport
         ? [
-            { key: "id",         label: "ID",         width: 17, align: "left"  },
-            { key: "name",       label: "Name",       width: 36, align: "left"  },
-            { key: "role",       label: "Role",       width: 24, align: "left"  },
+            { key: "id",         label: "ID",         width: 18, align: "left"  },
+            { key: "name",       label: "Name",       width: 56, align: "left"  },
+            { key: "role",       label: "Role",       width: 40, align: "left"  },
             { key: "days",       label: "Days",       width: 15, align: "right" },
-            { key: "perDay",     label: "Per Day",    width: 23, align: "right" },
-            { key: "gross",      label: "Gross",      width: 30, align: "right" },
-            { key: "incentive",  label: "Incent.",    width: 25, align: "right" },
-            { key: "deductions", label: "Deductions", width: 30, align: "right" },
-            { key: "net",        label: "Net Payout", width: 33, align: "right" },
-            { key: "paid",       label: `${statusFilter} Paid`, width: 34, align: "right" },
+            { key: "perDay",     label: "Per Day",    width: 19, align: "right" },
+            { key: "gross",      label: "Gross",      width: 22, align: "right" },
+            { key: "incentive",  label: "Incent.",    width: 21, align: "right" },
+            { key: "deductions", label: "Deductions", width: 24, align: "right" },
+            { key: "net",        label: "Net Payout", width: 30, align: "right" },
+            { key: "paid",       label: `${statusFilter} Paid`, width: 22, align: "right" },
           ]
         : [
-            { key: "id",         label: "ID",         width: 17, align: "left"  },
-            { key: "name",       label: "Name",       width: 42, align: "left"  },
-            { key: "role",       label: "Role",       width: 30, align: "left"  },
-            { key: "days",       label: "Days",       width: 16, align: "right" },
-            { key: "perDay",     label: "Per Day",    width: 25, align: "right" },
-            { key: "gross",      label: "Gross",      width: 33, align: "right" },
-            { key: "incentive",  label: "Incent.",    width: 28, align: "right" },
-            { key: "deductions", label: "Deductions", width: 34, align: "right" },
-            { key: "net",        label: "Net Payout", width: 42, align: "right" },
+            { key: "id",         label: "ID",         width: 18, align: "left"  },
+            { key: "name",       label: "Name",       width: 62, align: "left"  },
+            { key: "role",       label: "Role",       width: 46, align: "left"  },
+            { key: "days",       label: "Days",       width: 15, align: "right" },
+            { key: "perDay",     label: "Per Day",    width: 20, align: "right" },
+            { key: "gross",      label: "Gross",      width: 23, align: "right" },
+            { key: "incentive",  label: "Incent.",    width: 22, align: "right" },
+            { key: "deductions", label: "Deductions", width: 25, align: "right" },
+            { key: "net",        label: "Net Payout", width: 36, align: "right" },
           ]) as ReadonlyArray<{ key: string; label: string; width: number; align: "left" | "right" }>;
 
       const declaredWidth = columns.reduce((sum, c) => sum + c.width, 0);
@@ -667,9 +707,7 @@ export function PayrollReports() {
       const headers = columns.map(c => ({ label: c.label, x: xOf(c.key), align: c.align }));
 
       /* Clip text to a column, measured in the CURRENT font rather than by a
-       * character count. The old `.substring(0, 15)` was a guess at width: a
-       * wide role overflowed into the next column. Measuring means any string
-       * stays inside its cell whatever the font. */
+       * character count. Only a last resort now -- see drawFitted. */
       const fitToColumn = (text: string, maxWidth: number) => {
         if (pdf.getTextWidth(text) <= maxWidth) return text;
         let clipped = text;
@@ -679,53 +717,83 @@ export function PayrollReports() {
         return clipped + ".";
       };
 
+      /**
+       * Draw text in a column, SHRINKING the font to fit rather than cutting
+       * the text off.
+       *
+       * A payroll register is handed to an accountant, a bank and the
+       * labourers themselves, so a truncated name ("SANTHOSH KOMBAKKAD.") is
+       * worse than a slightly smaller one -- it can make two people
+       * indistinguishable on a document about their pay. The font steps down
+       * in quarter-points to a readable floor; clipping only happens if a name
+       * still will not fit at that floor, which no name on the roster does.
+       */
+      const drawFitted = (key: string, text: string, baseSize: number, y: number, minSize = 5.5) => {
+        const maxWidth = widthOf(key);
+        let size = baseSize;
+        type(size);
+        while (size > minSize && pdf.getTextWidth(text) > maxWidth) {
+          size = Math.max(minSize, size - 0.25);
+          pdf.setFontSize(size);
+        }
+        const shown = pdf.getTextWidth(text) > maxWidth ? fitToColumn(text, maxWidth) : text;
+        pdf.text(shown, xOf(key), y, { align: alignOf(key) });
+      };
+
       /** Whole rupees -- the register has no room for paise on every column. */
       const money = (n: number) => Math.round(n).toLocaleString("en-IN");
       
+      /* Table head: reversed out of the same band colour as the masthead, so
+       * the header reads as part of the document rather than a grey strip. */
+      const HEAD_H = 8;
       const drawTableHeaders = (startY: number) => {
-        pdf.setFillColor(243, 244, 246); 
-        pdf.rect(15, startY - 5, 267, 7, "F");
-        
-        pdf.setFontSize(8.5);
-        pdf.setFont("helvetica", "bold");
-        pdf.setTextColor(55, 65, 81);
-        
+        setFill(BAND);
+        pdf.rect(15, startY - 5.5, 267, HEAD_H, "F");
+
+        type(8);
+        setInk(PAPER);
         headers.forEach(h => {
-          pdf.text(h.label, h.x, startY, { align: h.align as any });
+          pdf.text(h.label.toUpperCase(), h.x, startY, { align: h.align as any });
         });
-        
-        pdf.setDrawColor(156, 163, 175);
-        pdf.rect(15, startY - 5, 267, 7, "S");
-        colBounds.forEach(bx => {
-          pdf.line(bx, startY - 5, bx, startY + 2);
+
+        // Column rules inside the dark head, drawn a shade lighter so they
+        // separate without cutting the band up.
+        pdf.setLineWidth(0.2);
+        pdf.setDrawColor(75, 85, 99);
+        colBounds.slice(1, -1).forEach(bx => {
+          pdf.line(bx, startY - 5.5, bx, startY - 5.5 + HEAD_H);
         });
       };
-      
-      drawTableHeaders(61);
-      
-      let y = 68;
+
+      drawTableHeaders(55);
+
+      let y = 63;
       let rowHeight = 7.5;
       let fontSize = 8.5;
-      
+
+      const drawPageFooter = () => {
+        type(7);
+        setInk(INK_SOFT);
+        pdf.text(
+          `${config?.name || "ShiftWise"}  |  ${title}  |  ${selectedMonth} ${selectedYear}`,
+          15, 200
+        );
+        pdf.text(`Page ${pageNumber}`, 282, 200, { align: "right" });
+      };
+
       const checkPageBreak = (requiredSpace = 10) => {
         if (y + requiredSpace > 190) { // A4 Landscape height is 210mm
-          pdf.setFontSize(8);
-          pdf.setFont("helvetica", "normal");
-          pdf.setTextColor(107, 114, 128);
-          pdf.text(`Page ${pageNumber}`, 282, 200, { align: "right" });
-          
+          drawPageFooter();
           pdf.addPage();
           pageNumber++;
           y = 20;
           drawTableHeaders(y);
-          y += 7;
-          pdf.setFont("helvetica", "normal");
-          pdf.setTextColor(0, 0, 0);
+          y += HEAD_H;
         }
       };
-      
-      pdf.setFont("helvetica", "normal");
-      pdf.setTextColor(0, 0, 0);
+
+      type(fontSize);
+      setInk(INK);
       
       let totalDays = 0;
       let totalPaid = 0;
@@ -747,71 +815,66 @@ export function PayrollReports() {
         const rowBottom = y + 2.5;
 
         if (idx % 2 === 1) {
-          pdf.setFillColor(249, 250, 251); 
+          setFill(ZEBRA);
           pdf.rect(15, rowTop, 267, rowHeight, "F");
         }
-        
-        pdf.setFont("courier", "normal");
-        pdf.setFontSize(fontSize);
+
+        type(fontSize);
+        setInk(INK_SOFT);
         const shortId = `LBR${entry.id.substring(entry.id.length - 4).toUpperCase()}`;
         pdf.text(shortId, xOf("id"), y);
 
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(fontSize);
-        pdf.text(fitToColumn(entry.name, widthOf("name")), xOf("name"), y);
+        // Full name, shrunk to fit if long -- never cut short.
+        setInk(INK);
+        drawFitted("name", entry.name, fontSize, y);
+        setInk(INK_SOFT);
+        drawFitted("role", entry.role || "Staff", fontSize - 1, y);
 
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(fontSize - 1);
-        pdf.text(fitToColumn(entry.role || "Staff", widthOf("role")), xOf("role"), y);
-
-        pdf.setFont("courier", "normal");
-        pdf.setFontSize(fontSize);
+        type(fontSize);
+        setInk(INK);
         pdf.text(String(entry.daysWorked), xOf("days"), y, { align: "right" });
         pdf.text(money(entry.perDay), xOf("perDay"), y, { align: "right" });
         pdf.text(money(entry.gross), xOf("gross"), y, { align: "right" });
         pdf.text(money(entry.incentive), xOf("incentive"), y, { align: "right" });
         pdf.text(money(entry.deductions), xOf("deductions"), y, { align: "right" });
-
-        pdf.setFont("courier", "bold");
         pdf.text(money(entry.net), xOf("net"), y, { align: "right" });
 
         if (isPaymentReport) {
           const paid = paidMap!.get(entry.id) ?? 0;
           totalPaid += paid;
+          setInk(ACCENT);
           pdf.text(money(paid), xOf("paid"), y, { align: "right" });
+          setInk(INK);
         }
-        
-        pdf.setDrawColor(209, 213, 219);
+
+        // Hairline rules: the row separator runs the full width, the column
+        // rules only between columns (not down the outer edges), which reads
+        // lighter than a boxed grid without losing the separation.
+        pdf.setLineWidth(0.15);
+        setRule(RULE);
         pdf.line(15, rowBottom, 282, rowBottom);
-        colBounds.forEach(bx => {
+        colBounds.slice(1, -1).forEach(bx => {
           pdf.line(bx, rowTop, bx, rowBottom);
         });
-        
+
         y += rowHeight;
       });
-      
+
       checkPageBreak(30);
 
-      // Totals Footer Row
+      /* Totals: reversed out of the band colour, matching the masthead and the
+       * table head, so the eye lands on the three anchors of the page. */
       const footerTop = y - rowHeight + 2.5;
-      const footerBottom = footerTop + 8;
+      const FOOTER_H = 9;
 
-      pdf.setDrawColor(31, 41, 55);
-      pdf.setFillColor(243, 244, 246);
-      pdf.rect(15, footerTop, 267, 8, "FD");
-      
-      colBounds.forEach(bx => {
-        pdf.line(bx, footerTop, bx, footerBottom);
-      });
+      setFill(BAND);
+      pdf.rect(15, footerTop, 267, FOOTER_H, "F");
 
-      const footerY = footerTop + 5.5;
+      const footerY = footerTop + 6;
 
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8.5);
-      pdf.setTextColor(31, 41, 55);
+      type(8.5);
+      setInk(PAPER);
       pdf.text("TOTALS", xOf("name"), footerY);
-
-      pdf.setFont("courier", "bold");
       pdf.text(String(Math.round(totalDays * 100) / 100), xOf("days"), footerY, { align: "right" });
       // Per Day is a rate, not a quantity -- summing it across labourers would
       // be meaningless, so the column is dashed out in the totals row.
@@ -823,15 +886,23 @@ export function PayrollReports() {
       if (isPaymentReport) {
         pdf.text(money(totalPaid), xOf("paid"), footerY, { align: "right" });
       }
-      
-      // Signature lines
-      const sigY = y + 15;
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(9);
-      pdf.setTextColor(0, 0, 0);
-      pdf.text("Prepared By: ____________________", 15, sigY);
-      pdf.text("Checked By: ____________________", 115, sigY);
-      pdf.text("Authorized Signatory: ____________________", 200, sigY);
+
+      /* Signature blocks: a rule with a label UNDER it, rather than a row of
+       * underscores typed into the text. Prints as a line to sign on at any
+       * scale, and does not drift out of alignment with the labels. */
+      const sigY = footerTop + FOOTER_H + 22;
+      const sigW = 62;
+      ["Prepared By", "Checked By", "Authorised Signatory"].forEach((label, i) => {
+        const x = 15 + i * 90;
+        pdf.setLineWidth(0.3);
+        setRule([148, 163, 184]);
+        pdf.line(x, sigY, x + sigW, sigY);
+        type(7);
+        setInk(INK_SOFT);
+        pdf.text(label.toUpperCase(), x, sigY + 4);
+      });
+
+      drawPageFooter();
       
       const fileName = isPaymentReport
         ? `${statusFilter}_Paid_Report_${selectedMonth}_${selectedYear}.pdf`
