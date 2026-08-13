@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { HandCoins, Plus, Trash2, Check, X, Search } from "lucide-react";
+import { HandCoins, Plus, Trash2, Check, X, Search, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAppContext } from "@/components/providers/app-provider";
 import { loanBalances, loanBalanceFor } from "@/lib/loans";
@@ -30,7 +30,7 @@ function todayLocalISO(): string {
  * where it gets recovered.
  */
 export function EmployeeLoans() {
-  const { employees, attendance, loans, handleCreateLoan, handleDeleteLoan } = useAppContext();
+  const { employees, attendance, loans, handleCreateLoan, handleUpdateLoan, handleDeleteLoan } = useAppContext();
   const { toast } = useToast();
 
   const [employeeId, setEmployeeId] = useState("");
@@ -40,6 +40,25 @@ export function EmployeeLoans() {
   const [search, setSearch] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  /* Inline edit of an issued loan. Only the principal, its date and the
+   * remarks are editable -- NOT which labourer it belongs to. Moving a loan
+   * between people would silently move an outstanding balance off one worker
+   * and onto another; that is a delete plus a re-issue, and should be visible
+   * as two actions rather than one quiet edit. */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editRemarks, setEditRemarks] = useState("");
+
+  const beginEdit = (loan: any) => {
+    setPendingDeleteId(null);
+    setEditingId(loan.id);
+    setEditAmount(String(loan.amount ?? ""));
+    setEditDate(loan.issueDate || "");
+    setEditRemarks(loan.remarks || "");
+  };
+  const cancelEdit = () => setEditingId(null);
 
   // Memoised so the `|| []` fallback does not mint a new array each render and
   // invalidate every downstream useMemo.
@@ -88,6 +107,49 @@ export function EmployeeLoans() {
       setEmployeeId(""); setAmount(""); setRemarks("");
     } catch (e: any) {
       toast({ variant: "destructive", title: "Could not issue loan", description: e.message || "Please try again." });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveEdit = async (loan: any) => {
+    const value = Number(editAmount);
+    if (!editAmount.trim() || !Number.isFinite(value) || value <= 0) {
+      toast({ variant: "destructive", title: "Invalid amount", description: "Enter a loan amount greater than zero." });
+      return;
+    }
+
+    /* Recomputed against this labourer's OTHER loans plus the edited figure,
+     * so the warning reflects what the balance will actually be. Cutting the
+     * principal below what has already been deducted in attendance leaves the
+     * worker over-recovered -- money taken from them that is no longer owed.
+     * Blocked rather than warned: the balance would go straight to the
+     * `overpaid` bucket, and it is nearly always a typo. */
+    const others = safeLoans.filter((l: any) => l.id !== loan.id);
+    const after = loanBalanceFor(loan.employeeId, [...others, { ...loan, amount: value }], safeAttendance);
+    if (after.overpaid > 0) {
+      toast({
+        variant: "destructive",
+        title: "Amount is below what is already recovered",
+        description: `${nameOf(loan.employeeId)} has already repaid ₹${after.repaid.toLocaleString('en-IN')}. Setting the loan to ₹${value.toLocaleString('en-IN')} would over-recover them by ₹${after.overpaid.toLocaleString('en-IN')}.`,
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await handleUpdateLoan(loan.id, {
+        amount: value,
+        issueDate: editDate,
+        remarks: editRemarks,
+      });
+      toast({
+        title: "Loan updated",
+        description: `${nameOf(loan.employeeId)} — ₹${value.toLocaleString('en-IN')}. Outstanding now ₹${after.outstanding.toLocaleString('en-IN')}.`,
+      });
+      setEditingId(null);
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Could not update loan", description: e.message || "Please try again." });
     } finally {
       setIsSaving(false);
     }
@@ -240,7 +302,10 @@ export function EmployeeLoans() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Loan Records</CardTitle>
-            <CardDescription className="text-xs">Each advance issued. Removing one reduces that labourer&apos;s outstanding balance.</CardDescription>
+            <CardDescription className="text-xs">
+              Each advance issued. Editing the amount or removing a record changes that labourer&apos;s outstanding balance.
+              Repayments are not edited here — they are the Loan (-) amounts on attendance.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="rounded-md border border-border/50">
@@ -255,36 +320,89 @@ export function EmployeeLoans() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {safeLoans.map((l: any) => (
-                    <TableRow key={l.id}>
-                      <TableCell className="text-xs text-muted-foreground">{l.issueDate || '—'}</TableCell>
-                      <TableCell className="text-sm font-medium">{nameOf(l.employeeId)}</TableCell>
-                      <TableCell className="text-right font-mono">₹{Number(l.amount).toLocaleString('en-IN')}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{l.remarks || '—'}</TableCell>
-                      <TableCell className="text-right">
-                        {pendingDeleteId === l.id ? (
-                          <div className="flex justify-end items-center gap-2">
-                            <span className="text-[10px] text-muted-foreground">Remove?</span>
-                            <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-red-500/10"
-                              aria-label="Confirm remove loan"
-                              onClick={async () => { await handleDeleteLoan(l.id); setPendingDeleteId(null); }}>
-                              <Check className="w-3.5 h-3.5 text-red-500" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="w-7 h-7" aria-label="Cancel"
-                              onClick={() => setPendingDeleteId(null)}>
-                              <X className="w-3.5 h-3.5 text-muted-foreground" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-red-500/10"
-                            aria-label={`Remove loan for ${nameOf(l.employeeId)}`}
-                            onClick={() => setPendingDeleteId(l.id)}>
-                            <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {safeLoans.map((l: any) => {
+                    const isEditing = editingId === l.id;
+                    return (
+                      <TableRow key={l.id} className={cn(isEditing && "bg-accent/5")}>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {isEditing ? (
+                            <Input type="date" className="h-8 w-[140px] text-xs"
+                              aria-label="Issue date"
+                              value={editDate} onChange={e => setEditDate(e.target.value)} />
+                          ) : (l.issueDate || '—')}
+                        </TableCell>
+
+                        {/* Not editable -- see the note on editingId above. */}
+                        <TableCell className="text-sm font-medium">{nameOf(l.employeeId)}</TableCell>
+
+                        <TableCell className="text-right font-mono">
+                          {isEditing ? (
+                            <Input type="number" min="0" className="h-8 w-[120px] text-right font-mono"
+                              aria-label="Loan amount"
+                              value={editAmount} onChange={e => setEditAmount(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveEdit(l);
+                                if (e.key === 'Escape') cancelEdit();
+                              }}
+                              autoFocus />
+                          ) : `₹${Number(l.amount).toLocaleString('en-IN')}`}
+                        </TableCell>
+
+                        <TableCell className="text-xs text-muted-foreground">
+                          {isEditing ? (
+                            <Input className="h-8 text-xs" placeholder="Remarks"
+                              aria-label="Remarks"
+                              value={editRemarks} onChange={e => setEditRemarks(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') saveEdit(l);
+                                if (e.key === 'Escape') cancelEdit();
+                              }} />
+                          ) : (l.remarks || '—')}
+                        </TableCell>
+
+                        <TableCell className="text-right">
+                          {isEditing ? (
+                            <div className="flex justify-end items-center gap-2">
+                              <Button size="sm" className="h-7 px-2" disabled={isSaving}
+                                onClick={() => saveEdit(l)}>
+                                <Check className="w-3.5 h-3.5 mr-1" /> {isSaving ? "Saving..." : "Save"}
+                              </Button>
+                              <Button variant="ghost" size="icon" className="w-7 h-7" aria-label="Cancel edit"
+                                onClick={cancelEdit}>
+                                <X className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                            </div>
+                          ) : pendingDeleteId === l.id ? (
+                            <div className="flex justify-end items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground">Remove?</span>
+                              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-red-500/10"
+                                aria-label="Confirm remove loan"
+                                onClick={async () => { await handleDeleteLoan(l.id); setPendingDeleteId(null); }}>
+                                <Check className="w-3.5 h-3.5 text-red-500" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="w-7 h-7" aria-label="Cancel"
+                                onClick={() => setPendingDeleteId(null)}>
+                                <X className="w-3.5 h-3.5 text-muted-foreground" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex justify-end items-center gap-1">
+                              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-accent/10"
+                                aria-label={`Edit loan for ${nameOf(l.employeeId)}`}
+                                onClick={() => beginEdit(l)}>
+                                <Pencil className="w-3.5 h-3.5 text-accent" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-red-500/10"
+                                aria-label={`Remove loan for ${nameOf(l.employeeId)}`}
+                                onClick={() => { setEditingId(null); setPendingDeleteId(l.id); }}>
+                                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                              </Button>
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

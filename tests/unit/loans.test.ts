@@ -134,6 +134,74 @@ describe('loanBalances', () => {
   });
 });
 
+describe('editing an issued loan', () => {
+  // The Loan Records edit recomputes the balance as (this employee's OTHER
+  // loans) + (the edited one), which is what the screen shows and what its
+  // over-recovery guard blocks on.
+  const rebalance = (loans: any[], editId: string, newAmount: number, attendance: any[]) => {
+    const target = loans.find(l => l.id === editId)!;
+    const others = loans.filter(l => l.id !== editId);
+    return loanBalanceFor(target.employeeId, [...others, { ...target, amount: newAmount }], attendance);
+  };
+
+  it('raising the amount increases the outstanding balance', () => {
+    const loans = [{ id: 'L1', employeeId: 'E1', amount: 10000 }];
+    const b = rebalance(loans, 'L1', 15000, [{ employeeRefId: 'E1', loan: 2000 }]);
+    expect(b.issued).toBe(15000);
+    expect(b.outstanding).toBe(13000);
+  });
+
+  it('lowering the amount reduces the outstanding balance', () => {
+    const loans = [{ id: 'L1', employeeId: 'E1', amount: 10000 }];
+    const b = rebalance(loans, 'L1', 6000, [{ employeeRefId: 'E1', loan: 2000 }]);
+    expect(b.outstanding).toBe(4000);
+    expect(b.overpaid).toBe(0);
+  });
+
+  it('flags over-recovery when the new amount is below what was repaid', () => {
+    // 5000 already deducted in attendance; cutting the loan to 3000 means
+    // 2000 was taken that is no longer owed. The screen blocks this.
+    const loans = [{ id: 'L1', employeeId: 'E1', amount: 10000 }];
+    const b = rebalance(loans, 'L1', 3000, [{ employeeRefId: 'E1', loan: 5000 }]);
+    expect(b.overpaid).toBe(2000);
+    expect(b.outstanding).toBe(0);
+  });
+
+  it('setting the amount to exactly what was repaid is allowed -- it closes the loan', () => {
+    const loans = [{ id: 'L1', employeeId: 'E1', amount: 10000 }];
+    const b = rebalance(loans, 'L1', 5000, [{ employeeRefId: 'E1', loan: 5000 }]);
+    expect(b.overpaid).toBe(0);
+    expect(b.outstanding).toBe(0);
+    expect(b.isCleared).toBe(true);
+  });
+
+  it("counts the employee's other loans when judging the edit", () => {
+    // A second live loan covers the deductions, so cutting L1 is fine.
+    const loans = [
+      { id: 'L1', employeeId: 'E1', amount: 10000 },
+      { id: 'L2', employeeId: 'E1', amount: 8000 },
+    ];
+    const b = rebalance(loans, 'L1', 1000, [{ employeeRefId: 'E1', loan: 5000 }]);
+    expect(b.issued).toBe(9000);
+    expect(b.overpaid).toBe(0);
+    expect(b.outstanding).toBe(4000);
+  });
+
+  it('does not let another employee\'s repayments affect the edit', () => {
+    const loans = [
+      { id: 'L1', employeeId: 'E1', amount: 10000 },
+      { id: 'L2', employeeId: 'E2', amount: 9000 },
+    ];
+    const b = rebalance(loans, 'L1', 4000, [
+      { employeeRefId: 'E1', loan: 1000 },
+      { employeeRefId: 'E2', loan: 9000 },
+    ]);
+    expect(b.issued).toBe(4000);
+    expect(b.outstanding).toBe(3000);
+    expect(b.overpaid).toBe(0);
+  });
+});
+
 describe('cappedInstalment', () => {
   it('allows an instalment up to the outstanding balance', () => {
     expect(cappedInstalment(2000, 5000)).toBe(2000);

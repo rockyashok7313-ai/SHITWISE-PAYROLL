@@ -39,6 +39,7 @@ interface AppContextType {
   handleUpdateVoucher: (id: string, updates: any) => Promise<void>;
   handleDeleteVoucher: (id: string) => Promise<void>;
   handleCreateLoan: (loan: any) => Promise<void>;
+  handleUpdateLoan: (id: string, updates: any) => Promise<void>;
   handleDeleteLoan: (id: string) => Promise<void>;
 }
 
@@ -791,6 +792,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     markSaved();
   };
 
+  const handleUpdateLoan = async (id: string, updates: any) => {
+    if (isAccountant) {
+      toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
+      return;
+    }
+    if (!activeCompanyId) return;
+    const now = new Date().toISOString();
+    const updated = loans.map((l: any) => l.id === id ? { ...l, ...updates, updatedAt: now } : l);
+    setLoans(updated);
+    localStorage.setItem(`loans_${activeCompanyId}`, JSON.stringify(updated));
+    maybeAutoBackup();
+
+    const changed = updated.find((l: any) => l.id === id);
+    if (changed) {
+      markSaving();
+      const { error } = await supabase.from('loans').update(loanToRow(changed, activeCompanyId)).eq('id', id);
+      if (error) { console.error("Supabase update loan error:", error); markSaveError(error); return; }
+      markSaved();
+    }
+  };
+
   const handleDeleteLoan = async (id: string) => {
     if (isAccountant) {
       toast({ variant: "destructive", title: "Access Denied", description: "Accountants have read-only access." });
@@ -870,6 +892,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       handleUpdateVoucher,
       handleDeleteVoucher,
       handleCreateLoan,
+      handleUpdateLoan,
       handleDeleteLoan,
     }}>
       {children}
