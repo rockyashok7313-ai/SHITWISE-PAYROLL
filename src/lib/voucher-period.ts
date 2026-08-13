@@ -56,6 +56,10 @@ export function isVoucherForPeriod(
 export interface VoucherLike {
   employeeId?: string;
   month?: string;
+  /** "Bank" or "Cash". Free text in the store, so compared case-insensitively. */
+  paymentMethod?: string;
+  /** Stored as a string; every read site has to Number() it. */
+  amount?: number | string;
 }
 
 /**
@@ -80,4 +84,74 @@ export function paidEmployeeIds(
     }
   }
   return ids;
+}
+
+/* ------------------------------------------------------------------ */
+/* Payment method: the Bank Paid / Cash Paid reports                   */
+/* ------------------------------------------------------------------ */
+
+export type PaymentMethod = 'Bank' | 'Cash';
+
+/** Case/space-tolerant match, since paymentMethod is free text in the store. */
+export function isPaymentMethod(value: string | undefined, method: PaymentMethod): boolean {
+  return (value || '').trim().toLowerCase() === method.toLowerCase();
+}
+
+/**
+ * Total actually paid to one employee in a period by a given method.
+ *
+ * Sums rather than taking the first match: a period can legitimately hold more
+ * than one voucher for the same person (a correction, or a split payment), and
+ * a report that silently showed only one of them would under-state what left
+ * the bank.
+ *
+ * Returns null when they have no voucher of that method in the period, which
+ * is how callers tell "paid nothing by bank" from "not on the bank list".
+ */
+export function amountPaidByMethod(
+  vouchers: VoucherLike[] | undefined,
+  employeeId: string,
+  monthName: string,
+  year: string | number,
+  method: PaymentMethod
+): number | null {
+  if (!vouchers || !employeeId) return null;
+  let total = 0;
+  let found = false;
+  for (const v of vouchers) {
+    if (v.employeeId !== employeeId) continue;
+    if (!isVoucherForPeriod(v.month, monthName, year)) continue;
+    if (!isPaymentMethod(v.paymentMethod, method)) continue;
+    found = true;
+    const n = Number(v.amount);
+    total += Number.isFinite(n) ? n : 0;
+  }
+  return found ? total : null;
+}
+
+/**
+ * Employee ids paid by a given method in a period, with what each was paid.
+ *
+ * This is the Bank Paid / Cash Paid report: it lists who was paid that way and
+ * the amount that actually went out, taken from the voucher rather than
+ * recomputed from attendance. The two can differ -- the vouchers screen has a
+ * reconcile action for exactly that -- and a payment report has to agree with
+ * the money, not with the calculation.
+ */
+export function paidByMethod(
+  vouchers: VoucherLike[] | undefined,
+  monthName: string,
+  year: string | number,
+  method: PaymentMethod
+): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!vouchers) return out;
+  for (const v of vouchers) {
+    if (!v.employeeId) continue;
+    if (!isVoucherForPeriod(v.month, monthName, year)) continue;
+    if (!isPaymentMethod(v.paymentMethod, method)) continue;
+    const n = Number(v.amount);
+    out.set(v.employeeId, (out.get(v.employeeId) ?? 0) + (Number.isFinite(n) ? n : 0));
+  }
+  return out;
 }

@@ -4,7 +4,10 @@ import {
   parsePeriod,
   samePeriod,
   isVoucherForPeriod,
-  paidEmployeeIds
+  paidEmployeeIds,
+  isPaymentMethod,
+  amountPaidByMethod,
+  paidByMethod
 } from '../../src/lib/voucher-period';
 
 describe('periodLabel', () => {
@@ -106,5 +109,110 @@ describe('paidEmployeeIds', () => {
   it('matches the voucher period tolerantly (case/spacing)', () => {
     const ids = paidEmployeeIds([{ employeeId: 'E1', month: 'may  2027' }], 'May', '2027');
     expect(ids.has('E1')).toBe(true);
+  });
+});
+
+describe('isPaymentMethod', () => {
+  it('matches regardless of case and surrounding space', () => {
+    expect(isPaymentMethod('Bank', 'Bank')).toBe(true);
+    expect(isPaymentMethod('bank', 'Bank')).toBe(true);
+    expect(isPaymentMethod('  BANK ', 'Bank')).toBe(true);
+    expect(isPaymentMethod('Cash', 'Cash')).toBe(true);
+  });
+
+  it('does not confuse the two methods', () => {
+    expect(isPaymentMethod('Cash', 'Bank')).toBe(false);
+    expect(isPaymentMethod('Bank', 'Cash')).toBe(false);
+  });
+
+  it('treats a missing method as neither', () => {
+    expect(isPaymentMethod(undefined, 'Bank')).toBe(false);
+    expect(isPaymentMethod('', 'Cash')).toBe(false);
+  });
+});
+
+describe('paidByMethod', () => {
+  const vouchers = [
+    { employeeId: 'E1', month: 'May 2027', paymentMethod: 'Bank', amount: '12000' },
+    { employeeId: 'E2', month: 'May 2027', paymentMethod: 'Cash', amount: '8000' },
+    { employeeId: 'E3', month: 'May 2027', paymentMethod: 'Bank', amount: '5000' },
+    { employeeId: 'E1', month: 'April 2027', paymentMethod: 'Bank', amount: '9999' },
+  ];
+
+  it('lists only the employees paid by that method in that period', () => {
+    const bank = paidByMethod(vouchers, 'May', '2027', 'Bank');
+    expect([...bank.keys()].sort()).toEqual(['E1', 'E3']);
+    expect(bank.get('E1')).toBe(12000);
+    expect(bank.get('E3')).toBe(5000);
+  });
+
+  it('separates cash from bank', () => {
+    const cash = paidByMethod(vouchers, 'May', '2027', 'Cash');
+    expect([...cash.keys()]).toEqual(['E2']);
+    expect(cash.get('E2')).toBe(8000);
+  });
+
+  it('does not leak another period into the report', () => {
+    const bank = paidByMethod(vouchers, 'May', '2027', 'Bank');
+    expect(bank.get('E1')).toBe(12000); // not 12000 + 9999
+  });
+
+  it('sums split payments rather than showing only one', () => {
+    const split = paidByMethod([
+      { employeeId: 'E1', month: 'May 2027', paymentMethod: 'Bank', amount: '5000' },
+      { employeeId: 'E1', month: 'May 2027', paymentMethod: 'Bank', amount: '3000' },
+    ], 'May', '2027', 'Bank');
+    expect(split.get('E1')).toBe(8000);
+  });
+
+  it('matches the period and the method tolerantly', () => {
+    const bank = paidByMethod(
+      [{ employeeId: 'E1', month: 'may  2027', paymentMethod: ' bank ', amount: 700 }],
+      'May', '2027', 'Bank'
+    );
+    expect(bank.get('E1')).toBe(700);
+  });
+
+  it('treats an unusable amount as zero rather than NaN', () => {
+    const bank = paidByMethod(
+      [{ employeeId: 'E1', month: 'May 2027', paymentMethod: 'Bank', amount: 'abc' }],
+      'May', '2027', 'Bank'
+    );
+    expect(bank.get('E1')).toBe(0);
+  });
+
+  it('returns an empty map for missing input', () => {
+    expect(paidByMethod(undefined, 'May', '2027', 'Bank').size).toBe(0);
+    expect(paidByMethod([], 'May', '2027', 'Cash').size).toBe(0);
+  });
+});
+
+describe('amountPaidByMethod', () => {
+  const vouchers = [
+    { employeeId: 'E1', month: 'May 2027', paymentMethod: 'Bank', amount: '12000' },
+    { employeeId: 'E2', month: 'May 2027', paymentMethod: 'Cash', amount: '8000' },
+  ];
+
+  it('returns the amount paid by that method', () => {
+    expect(amountPaidByMethod(vouchers, 'E1', 'May', '2027', 'Bank')).toBe(12000);
+  });
+
+  it('distinguishes "not on this list" from "paid zero"', () => {
+    // E1 was paid by bank, so there is no cash entry at all.
+    expect(amountPaidByMethod(vouchers, 'E1', 'May', '2027', 'Cash')).toBeNull();
+    // A real zero-value voucher is not the same as being absent.
+    expect(amountPaidByMethod(
+      [{ employeeId: 'E9', month: 'May 2027', paymentMethod: 'Cash', amount: 0 }],
+      'E9', 'May', '2027', 'Cash'
+    )).toBe(0);
+  });
+
+  it('returns null for an employee with no vouchers at all', () => {
+    expect(amountPaidByMethod(vouchers, 'E404', 'May', '2027', 'Bank')).toBeNull();
+  });
+
+  it('handles missing input', () => {
+    expect(amountPaidByMethod(undefined, 'E1', 'May', '2027', 'Bank')).toBeNull();
+    expect(amountPaidByMethod(vouchers, '', 'May', '2027', 'Bank')).toBeNull();
   });
 });

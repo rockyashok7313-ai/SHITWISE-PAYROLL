@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calendar } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, ResponsiveContainer, YAxis, Tooltip } from "recharts";
-import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle, Search, Coins, Calculator } from "lucide-react";
+import { FileSpreadsheet, TrendingUp, IndianRupee, PieChart, Printer, Download, Sparkles, Loader2, Gift, User, CalendarDays, FileText, FileDown, Table as TableIcon, MessageCircle, Search, Coins, Calculator, Landmark, Banknote } from "lucide-react";
 import { EMPLOYEES } from "@/lib/mock-data";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -40,7 +40,7 @@ import {
   yearOptions
 } from "@/lib/payroll";
 import { sumIncludedMonths, isHandEdited } from "@/lib/bonus-migration";
-import { paidEmployeeIds } from "@/lib/voucher-period";
+import { paidEmployeeIds, paidByMethod, type PaymentMethod } from "@/lib/voucher-period";
 
 const DEFAULT_TREND_DATA = [
   { month: "Jan", cost: 125000 },
@@ -493,25 +493,45 @@ export function PayrollReports() {
     }
   };
 
-  const handleDownloadPDF = async (statusFilter?: 'Paid' | 'Unpaid') => {
+  /**
+   * @param statusFilter  Paid/Unpaid narrow the register by voucher existence.
+   *   Bank/Cash produce a PAYMENT report instead: only the labourers paid that
+   *   way, with an extra column carrying what actually left the bank or the
+   *   cash box. That figure comes from the voucher, not from recomputing
+   *   attendance -- the two can differ (the vouchers screen has a reconcile
+   *   action for exactly that), and a payment report has to agree with the
+   *   money that moved, not with the calculation.
+   */
+  const handleDownloadPDF = async (statusFilter?: 'Paid' | 'Unpaid' | 'Bank' | 'Cash') => {
     if (!reportData) return;
-    
+
+    const isPaymentReport = statusFilter === 'Bank' || statusFilter === 'Cash';
+
     setIsDownloading(true);
     try {
       const { jsPDF } = await import("jspdf");
-      
+
+      // employeeId -> amount actually paid by this method in the period.
+      const paidMap = isPaymentReport
+        ? paidByMethod(vouchers, selectedMonth, selectedYear, statusFilter as PaymentMethod)
+        : null;
+
       let exportEntries = reportData;
-      if (statusFilter) {
+      if (isPaymentReport) {
+        exportEntries = reportData.filter(row => paidMap!.has(row.id));
+      } else if (statusFilter) {
          exportEntries = reportData.filter(row => {
             const status = isPaid(row.id) ? 'Paid' : 'Unpaid';
             return status === statusFilter;
          });
       }
-      
+
       if (exportEntries.length === 0) {
          toast({
             title: "No Data",
-            description: `There are no ${statusFilter ? statusFilter.toLowerCase() : ''} entries to export.`,
+            description: isPaymentReport
+              ? `No ${statusFilter!.toLowerCase()} payments recorded for ${selectedMonth} ${selectedYear}. Generate vouchers with that payment method first.`
+              : `There are no ${statusFilter ? statusFilter.toLowerCase() : ''} entries to export.`,
          });
          setIsDownloading(false);
          return;
@@ -529,9 +549,11 @@ export function PayrollReports() {
       pdf.setFontSize(18);
       pdf.setFont("helvetica", "bold");
       pdf.setTextColor(31, 41, 55);
-      const title = statusFilter 
-        ? `${statusFilter.toUpperCase()} SALARY REPORT` 
-        : "MONTHLY PAYROLL SUMMARY";
+      const title = isPaymentReport
+        ? `${statusFilter!.toUpperCase()} PAID REPORT`
+        : statusFilter
+          ? `${statusFilter.toUpperCase()} SALARY REPORT`
+          : "MONTHLY PAYROLL SUMMARY";
       pdf.text(title, 15, 32);
       
       // Metadata
@@ -552,10 +574,11 @@ export function PayrollReports() {
       pdf.text(String(exportEntries.length), 220, 42);
       
       pdf.setFont("helvetica", "bold");
-      pdf.text("STATUS:", 180, 47);
+      pdf.text(isPaymentReport ? "PAID VIA:" : "STATUS:", 180, 47);
       pdf.setFont("helvetica", "bold");
-      pdf.setTextColor(16, 185, 129); 
-      pdf.text("FINALIZED", 200, 47);
+      pdf.setTextColor(16, 185, 129);
+      pdf.text(isPaymentReport ? statusFilter!.toUpperCase() : "FINALIZED", 200, 47);
+      pdf.setTextColor(31, 41, 55);
       
       // Divider
       pdf.setDrawColor(229, 231, 235);
@@ -586,17 +609,35 @@ export function PayrollReports() {
       const PAD_LEFT = 2;   // inset for left-aligned text
       const PAD_RIGHT = 3;  // inset for right-aligned figures
 
-      const columns = [
-        { key: "id",         label: "ID",         width: 17, align: "left"  },
-        { key: "name",       label: "Name",       width: 42, align: "left"  },
-        { key: "role",       label: "Role",       width: 30, align: "left"  },
-        { key: "days",       label: "Days",       width: 16, align: "right" },
-        { key: "perDay",     label: "Per Day",    width: 25, align: "right" },
-        { key: "gross",      label: "Gross",      width: 33, align: "right" },
-        { key: "incentive",  label: "Incent.",    width: 28, align: "right" },
-        { key: "deductions", label: "Deductions", width: 34, align: "right" },
-        { key: "net",        label: "Net Payout", width: 42, align: "right" },
-      ] as const;
+      /* A payment report carries an extra column for what actually left the
+       * bank/cash box, so the other columns give up a little width to keep the
+       * total at TABLE_WIDTH. Net Payout stays -- the gap between what was
+       * earned and what was paid is the whole point of handing this to an
+       * accountant. */
+      const columns = (isPaymentReport
+        ? [
+            { key: "id",         label: "ID",         width: 17, align: "left"  },
+            { key: "name",       label: "Name",       width: 36, align: "left"  },
+            { key: "role",       label: "Role",       width: 24, align: "left"  },
+            { key: "days",       label: "Days",       width: 15, align: "right" },
+            { key: "perDay",     label: "Per Day",    width: 23, align: "right" },
+            { key: "gross",      label: "Gross",      width: 30, align: "right" },
+            { key: "incentive",  label: "Incent.",    width: 25, align: "right" },
+            { key: "deductions", label: "Deductions", width: 30, align: "right" },
+            { key: "net",        label: "Net Payout", width: 33, align: "right" },
+            { key: "paid",       label: `${statusFilter} Paid`, width: 34, align: "right" },
+          ]
+        : [
+            { key: "id",         label: "ID",         width: 17, align: "left"  },
+            { key: "name",       label: "Name",       width: 42, align: "left"  },
+            { key: "role",       label: "Role",       width: 30, align: "left"  },
+            { key: "days",       label: "Days",       width: 16, align: "right" },
+            { key: "perDay",     label: "Per Day",    width: 25, align: "right" },
+            { key: "gross",      label: "Gross",      width: 33, align: "right" },
+            { key: "incentive",  label: "Incent.",    width: 28, align: "right" },
+            { key: "deductions", label: "Deductions", width: 34, align: "right" },
+            { key: "net",        label: "Net Payout", width: 42, align: "right" },
+          ]) as ReadonlyArray<{ key: string; label: string; width: number; align: "left" | "right" }>;
 
       const declaredWidth = columns.reduce((sum, c) => sum + c.width, 0);
       if (declaredWidth !== TABLE_WIDTH) {
@@ -687,6 +728,7 @@ export function PayrollReports() {
       pdf.setTextColor(0, 0, 0);
       
       let totalDays = 0;
+      let totalPaid = 0;
       let totalGross = 0;
       let totalIncentive = 0;
       let totalDeductions = 0;
@@ -732,6 +774,12 @@ export function PayrollReports() {
 
         pdf.setFont("courier", "bold");
         pdf.text(money(entry.net), xOf("net"), y, { align: "right" });
+
+        if (isPaymentReport) {
+          const paid = paidMap!.get(entry.id) ?? 0;
+          totalPaid += paid;
+          pdf.text(money(paid), xOf("paid"), y, { align: "right" });
+        }
         
         pdf.setDrawColor(209, 213, 219);
         pdf.line(15, rowBottom, 282, rowBottom);
@@ -772,6 +820,9 @@ export function PayrollReports() {
       pdf.text(money(totalIncentive), xOf("incentive"), footerY, { align: "right" });
       pdf.text(money(totalDeductions), xOf("deductions"), footerY, { align: "right" });
       pdf.text(money(totalNet), xOf("net"), footerY, { align: "right" });
+      if (isPaymentReport) {
+        pdf.text(money(totalPaid), xOf("paid"), footerY, { align: "right" });
+      }
       
       // Signature lines
       const sigY = y + 15;
@@ -782,12 +833,16 @@ export function PayrollReports() {
       pdf.text("Checked By: ____________________", 115, sigY);
       pdf.text("Authorized Signatory: ____________________", 200, sigY);
       
-      const fileName = `Payroll_Report_${statusFilter ? statusFilter + '_' : ''}${selectedMonth}_${selectedYear}.pdf`;
+      const fileName = isPaymentReport
+        ? `${statusFilter}_Paid_Report_${selectedMonth}_${selectedYear}.pdf`
+        : `Payroll_Report_${statusFilter ? statusFilter + '_' : ''}${selectedMonth}_${selectedYear}.pdf`;
       pdf.save(fileName);
-      
+
       toast({
         title: "PDF Downloaded",
-        description: `${statusFilter || 'All'} payroll report has been saved to your device.`,
+        description: isPaymentReport
+          ? `${statusFilter} paid report: ${exportEntries.length} labourer${exportEntries.length === 1 ? '' : 's'}, ₹${totalPaid.toLocaleString('en-IN')} total.`
+          : `${statusFilter || 'All'} payroll report has been saved to your device.`,
       });
     } catch (error) {
       console.error(error);
@@ -1274,6 +1329,19 @@ Please contact HR if you have any questions.`;
               <DropdownMenuItem onClick={() => handleDownloadPDF('Unpaid')} className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10">
                 <Calculator className="w-4 h-4 mr-2" />
                 Unpaid Salaries Only
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
+                By payment method
+              </DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => handleDownloadPDF('Bank')} className="cursor-pointer text-emerald-600 focus:text-emerald-600 focus:bg-emerald-500/10">
+                <Landmark className="w-4 h-4 mr-2" />
+                Bank Paid Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleDownloadPDF('Cash')} className="cursor-pointer text-amber-600 focus:text-amber-600 focus:bg-amber-500/10">
+                <Banknote className="w-4 h-4 mr-2" />
+                Cash Paid Report
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
