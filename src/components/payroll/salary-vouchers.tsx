@@ -632,6 +632,39 @@ export function SalaryVouchers() {
             <CardTitle className="text-sm">{editingVoucherId ? 'Edit Voucher' : 'Generate Voucher'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Clicking Edit in the table scrolls up to this card. Without a
+                banner naming the voucher, the only cue that the form switched
+                from creating to editing was the card title -- easy to miss,
+                and easy to think a change was not saved anywhere. */}
+            {editingVoucherId && (() => {
+              const target = safeVouchers.find(v => v.id === editingVoucherId);
+              return (
+                <div className="rounded-lg border border-accent/40 bg-accent/5 px-3 py-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-accent">Editing voucher</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {target
+                          ? <>{target.employeeName} &middot; {target.month} &middot; ₹{Number(target.amount).toLocaleString('en-IN')}</>
+                          : 'This voucher is no longer in the list.'}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-6 h-6 shrink-0"
+                      aria-label="Cancel editing"
+                      onClick={resetForm}
+                    >
+                      <X className="w-3.5 h-3.5 text-muted-foreground" />
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Saving updates this voucher. To pay someone else, cancel first.
+                  </p>
+                </div>
+              );
+            })()}
             <div className="space-y-1.5">
               <Label htmlFor="voucher-employee" className="text-xs font-bold text-muted-foreground">Employee</Label>
               <Select
@@ -901,12 +934,24 @@ export function SalaryVouchers() {
                       </TableHeader>
                       <TableBody>
                         {periodVouchers.map(v => (
-                          <TableRow key={v.id}>
+                          /* The edit form lives in the card at the top of the page,
+                             so the row being edited is marked here -- otherwise
+                             after the scroll there is nothing tying the form back
+                             to the voucher it is changing. */
+                          <TableRow
+                            key={v.id}
+                            className={cn(editingVoucherId === v.id && "bg-accent/10 ring-1 ring-inset ring-accent/40")}
+                          >
                             <TableCell className="text-xs text-muted-foreground">
                               {formatDisplayDate(v.date)}
                             </TableCell>
                             <TableCell className="font-medium text-sm">
                               {v.employeeName}
+                              {editingVoucherId === v.id && (
+                                <Badge variant="outline" className="ml-2 text-[9px] text-accent border-accent/40">
+                                  editing
+                                </Badge>
+                              )}
                               {v.remarks && <p className="text-[10px] text-muted-foreground">{v.remarks}</p>}
                             </TableCell>
                             <TableCell className="text-right font-mono font-medium">
@@ -979,14 +1024,19 @@ export function SalaryVouchers() {
                                   >
                                     <Printer className="w-3.5 h-3.5 text-blue-500" />
                                   </Button>
+                                  {/* Was muted grey between a blue printer and a red
+                                      bin, so it read as decoration rather than the
+                                      action it is. Coloured to match the pencil on
+                                      the Loans screen. */}
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="w-7 h-7"
+                                    className="w-7 h-7 hover:bg-accent/10"
                                     aria-label={`Edit voucher for ${v.employeeName}`}
+                                    title={`Edit this voucher — amount, date, method or remarks`}
                                     onClick={() => handleEditVoucher(v)}
                                   >
-                                    <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
+                                    <Edit2 className="w-3.5 h-3.5 text-accent" />
                                   </Button>
                                   <Button
                                     variant="ghost"
