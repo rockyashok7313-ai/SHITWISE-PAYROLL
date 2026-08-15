@@ -16,6 +16,7 @@ import {
   perDaySalary,
   monthlySalary,
   rateFromMonthlySalary,
+  rateFromPerDaySalary,
   MONTHLY_WORKING_DAYS
 } from '../../src/lib/payroll';
 
@@ -483,5 +484,51 @@ describe('salary conversions (hourly <-> per-day <-> monthly)', () => {
   it('defaults to the 9-hour shift when none is given, like the rest of payroll', () => {
     expect(perDaySalary(100)).toBe(900);
     expect(monthlySalary(100)).toBe(23400);
+  });
+});
+
+describe('rateFromPerDaySalary', () => {
+  // The factory's real figures: Rs.620/day before the increment, Rs.675 after.
+  it('converts a 12-hour day rate to an hourly rate', () => {
+    expect(rateFromPerDaySalary(620, '12-hour')).toBeCloseTo(51.6667, 4);
+    expect(rateFromPerDaySalary(675, '12-hour')).toBe(56.25);
+  });
+
+  it('converts a 9-hour day rate to an hourly rate', () => {
+    expect(rateFromPerDaySalary(450, '9-hour')).toBe(50);
+  });
+
+  it('defaults to the 9-hour shift when none is given', () => {
+    expect(rateFromPerDaySalary(450)).toBe(50);
+  });
+
+  it('round-trips exactly through perDaySalary', () => {
+    for (const shift of ['9-hour', '12-hour']) {
+      for (const perDay of [450, 500, 620, 675, 1000, 1785]) {
+        expect(perDaySalary(rateFromPerDaySalary(perDay, shift), shift)).toBeCloseTo(perDay, 9);
+      }
+    }
+  });
+
+  it('accepts a numeric string straight from the form input', () => {
+    expect(rateFromPerDaySalary('675', '12-hour')).toBe(56.25);
+  });
+
+  it('treats an unusable amount as zero rather than NaN', () => {
+    expect(rateFromPerDaySalary('abc', '12-hour')).toBe(0);
+    expect(rateFromPerDaySalary(undefined as any, '12-hour')).toBe(0);
+    expect(rateFromPerDaySalary('', '12-hour')).toBe(0);
+  });
+
+  it('a day rate entered in the dialog produces the gross the register will show', () => {
+    // What the supervisor types -> what payroll computes, end to end.
+    const rate = rateFromPerDaySalary(620, '12-hour');
+    const pay = calculateEntryBreakdown(
+      { hours: 26, rate, shift: '12-hour', incentive: 0, weeklyAdvance: 0, loan: 0 },
+      { rate, shift: '12-hour' }
+    );
+    expect(pay.perDaySalary).toBe(620);
+    expect(pay.gross).toBe(16120);
+    expect(pay.net).toBe(16120);
   });
 });

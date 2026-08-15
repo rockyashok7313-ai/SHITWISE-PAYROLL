@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { paidEmployeeIds } from "@/lib/voucher-period";
 import { isInSelectedPeriod, lastDayOfMonth, currentPayrollPeriod, entryYearMonth } from "@/lib/attendance-period";
 import { defaultShiftForEmployee } from "@/lib/shift-rules";
-import { calculateEntryBreakdown, perDaySalary } from "@/lib/payroll";
+import { calculateEntryBreakdown, perDaySalary, shiftHoursFor, rateFromPerDaySalary } from "@/lib/payroll";
 import { loanBalanceFor } from "@/lib/loans";
 import { refreshEntryLabelsAll, hasRateDrift, previousRateFor } from "@/lib/wage-snapshot";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -83,6 +83,9 @@ export function AttendanceLogger() {
   const { isAdmin, isSupervisor, isAccountant } = useRole(activeCompanyId);
   const [editingDialogId, setEditingDialogId] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  /** Raw text in the Per Day Salary box while it is being typed; null = derive
+   *  it from the stored rate. See dialogPerDayInput. */
+  const [perDayOverride, setPerDayOverride] = useState<string | null>(null);
   const [newEntryEmployeeId, setNewEntryEmployeeId] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogSearchQuery, setDialogSearchQuery] = useState("");
@@ -562,6 +565,7 @@ export function AttendanceLogger() {
    */
   const handleSelectEmployeeForEntry = (empId: string) => {
     setNewEntryEmployeeId(empId);
+    setPerDayOverride(null);   // the per-day box now reflects THIS labourer
     const roster = employees && employees.length > 0 ? employees : EMPLOYEES;
     const emp = roster.find((e: any) => e.id === empId);
     if (!emp) return;
@@ -597,6 +601,19 @@ export function AttendanceLogger() {
 
   /** The rate the dialog is currently set to apply. */
   const dialogRate = Number(newEntryDetails.rate) || Number(selectedDialogEmployee?.rate) || 0;
+
+  /**
+   * What to show in the Per Day Salary box.
+   *
+   * Normally derived from the stored hourly rate, but while the supervisor is
+   * typing, their raw text wins. Without that, "620.50" would be round-tripped
+   * through rate and redisplayed as "621" mid-keystroke, fighting the typing.
+   * Cleared whenever the figure is changed from somewhere else (a different
+   * labourer, a shift change, the old/new salary picker), so the box goes back
+   * to reflecting the rate.
+   */
+  const dialogPerDayInput =
+    perDayOverride ?? (dialogRate > 0 ? String(Math.round(perDaySalary(dialogRate, newEntryDetails.shift))) : "");
 
   /**
    * Live payout preview for what is currently typed into the dialog, so the
@@ -815,6 +832,7 @@ export function AttendanceLogger() {
             size="sm"
             onClick={() => {
               setEditingDialogId(null);
+              setPerDayOverride(null);
               const monthIndex = MONTHS.indexOf(selectedMonth);
               const monthNum = monthIndex !== -1 ? monthIndex + 1 : 1;
               const monthStr = String(monthNum).padStart(2, '0');
@@ -1204,6 +1222,7 @@ export function AttendanceLogger() {
                           className="h-9 w-9 hover:bg-accent/20 hover:text-accent p-0"
                           onClick={() => {
                             setEditingDialogId(entry.id);
+                            setPerDayOverride(null);
                             setNewEntryEmployeeId(entry.employeeRefId || entry.id.split('-')[0]);
                             const parts = entry.date.includes('to') ? entry.date.split(' to ') : [entry.date, entry.date];
                             setNewEntryDetails({
@@ -1297,7 +1316,7 @@ export function AttendanceLogger() {
         </div>
       </div>
 
-      <Dialog open={isAddDialogOpen} onOpenChange={v => { setIsAddDialogOpen(v); if(!v) { setDialogSearchQuery(""); setEditingDialogId(null); } }}>
+      <Dialog open={isAddDialogOpen} onOpenChange={v => { setIsAddDialogOpen(v); if(!v) { setDialogSearchQuery(""); setEditingDialogId(null); setPerDayOverride(null); } }}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{editingDialogId ? "Edit Staff Attendance" : "Add Staff Attendance"}</DialogTitle>
@@ -1378,6 +1397,10 @@ export function AttendanceLogger() {
                 <Select 
                   value={newEntryDetails.shift} 
                   onValueChange={v => {
+                    // Per day = hourly rate x shift hours, so changing the
+                    // shift changes the daily figure. Let the box re-derive so
+                    // that is visible rather than silent.
+                    setPerDayOverride(null);
                     setNewEntryDetails(p => {
                       const start = new Date(p.fromDate);
                       const end = new Date(p.toDate);
@@ -1417,7 +1440,10 @@ export function AttendanceLogger() {
                   <label className="text-sm font-semibold text-accent">Salary applied to this period</label>
                   <Select
                     value={String(dialogRate)}
-                    onValueChange={v => setNewEntryDetails(p => ({ ...p, rate: Number(v) || 0 }))}
+                    onValueChange={v => {
+                      setPerDayOverride(null);   // per-day box follows the picked salary
+                      setNewEntryDetails(p => ({ ...p, rate: Number(v) || 0 }));
+                    }}
                   >
                     <SelectTrigger className="bg-accent/5 border-accent/30 font-bold">
                       <SelectValue />
@@ -1458,12 +1484,71 @@ export function AttendanceLogger() {
                 />
               </div>
 
+              {/* Per Day Salary, Total Days and Total Wage are three views of
+                  one calculation: days x per-day = total. Editing any one
+                  updates the others, so whichever figure the supervisor
+                  actually knows is the one they can type.
+
+                  Stored on the row as an hourly `rate` (rate x shift hours =
+                  per day), which is what payroll and the register read. The
+                  per-day figure is what the factory actually negotiates, so it
+                  is the one shown -- previously it was invisible and could
+                  only be changed on the staff record. */}
               <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-accent">Per Day Salary (₹)</label>
+                <Input
+                  type="number" step="1" min="0"
+                  placeholder="e.g. 620"
+                  value={dialogPerDayInput}
+                  className="bg-accent/5 border-accent/30 font-bold"
+                  disabled={!selectedDialogEmployee}
+                  onChange={e => {
+                    const val = e.target.value;
+                    const perDay = parseFloat(val) || 0;
+                    setNewEntryDetails(p => {
+                      const days = Number(p.hours) || 0;
+                      return {
+                        ...p,
+                        rate: rateFromPerDaySalary(perDay, p.shift),
+                        totalWage: perDay > 0 && days > 0 ? String(Math.round(perDay * days)) : p.totalWage,
+                      };
+                    });
+                    setPerDayOverride(val);
+                  }}
+                />
+                {selectedDialogEmployee && (
+                  <p className="text-[10px] text-muted-foreground leading-snug">
+                    ₹{Math.round(Number(newEntryDetails.rate) || 0).toLocaleString('en-IN')}/hr &times;{' '}
+                    {shiftHoursFor(newEntryDetails.shift)}h shift
+                  </p>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold">Total Days</label>
+                <Input
+                  type="number" step="0.5"
+                  value={newEntryDetails.hours}
+                  onChange={e => {
+                    const days = parseFloat(e.target.value) || 0;
+                    setNewEntryDetails(p => {
+                      const perDay = perDaySalary(Number(p.rate) || 0, p.shift);
+                      return {
+                        ...p,
+                        hours: days,
+                        totalWage: perDay > 0 && days > 0 ? String(Math.round(perDay * days)) : p.totalWage,
+                      };
+                    });
+                  }}
+                />
+              </div>
+
+              <div className="flex flex-col gap-2 col-span-2">
                 <label className="text-sm font-semibold text-accent">Total Wage (₹)</label>
-                <Input 
-                  type="number" step="0.01" 
+                <Input
+                  type="number" step="0.01"
                   placeholder="Enter amount..."
-                  value={newEntryDetails.totalWage} 
+                  value={newEntryDetails.totalWage}
                   className="bg-accent/5 border-accent/30 font-bold"
                   onChange={e => {
                     const val = e.target.value;
@@ -1479,21 +1564,16 @@ export function AttendanceLogger() {
                       // the new one and produce the wrong number of days.
                       const rate = Number(p.rate) || Number(emp?.rate) || 0;
                       if (rate > 0 && amount > 0) {
-                        const shiftHrs = p.shift === '12-hour' ? 12 : 9;
-                        computedHours = parseFloat((amount / (rate * shiftHrs)).toFixed(2));
+                        computedHours = parseFloat((amount / (rate * shiftHoursFor(p.shift))).toFixed(2));
                       }
                       return { ...p, totalWage: val, hours: computedHours };
                     });
                   }}
                 />
-              </div>
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold">Total Days</label>
-                <Input 
-                  type="number" step="0.5" 
-                  value={newEntryDetails.hours} 
-                  onChange={e => setNewEntryDetails(p => ({ ...p, hours: parseFloat(e.target.value) || 0 }))}
-                />
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  Type a total to work backwards to the day count, or leave it &mdash; it follows
+                  Per Day &times; Total Days.
+                </p>
               </div>
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold">Incentive (+)</label>

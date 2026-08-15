@@ -110,6 +110,20 @@ export function monthlySalary(
 }
 
 /**
+ * The hourly rate implied by a full day's pay.
+ *
+ * The inverse of `perDaySalary`. The factory negotiates in rupees per day
+ * ("620 a day", "675 after the increment"), but a row stores an hourly rate,
+ * so the attendance screen converts on the way in. Kept here rather than
+ * inline in the form so the round trip perDaySalary(rateFromPerDaySalary(x))
+ * is covered by tests.
+ */
+export function rateFromPerDaySalary(perDay: number | string, shift?: string): number {
+  const hours = shiftHoursFor(shift);
+  return hours > 0 ? (Number(perDay) || 0) / hours : 0;
+}
+
+/**
  * The inverse: the hourly rate implied by a monthly salary. Lets the employee
  * form be entered from whichever figure the user actually knows -- many
  * factory owners negotiate monthly, not hourly.
