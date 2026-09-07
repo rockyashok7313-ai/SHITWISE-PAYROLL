@@ -471,10 +471,13 @@ export function EmployeeProfiles() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employees.filter(emp => 
-                  emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                  emp.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  emp.role.toLowerCase().includes(searchQuery.toLowerCase())
+                {employees.filter(emp =>
+                  // (?? '') guards employees with no role set (nullable in the
+                  // DB) -- one would otherwise crash this whole page the
+                  // moment it's rendered.
+                  (emp.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (emp.id ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (emp.role ?? '').toLowerCase().includes(searchQuery.toLowerCase())
                 ).map((emp) => {
                   const perDay = perDaySalary(emp.rate, emp.shift);
                   const monthly = monthlySalary(emp.rate, emp.shift);

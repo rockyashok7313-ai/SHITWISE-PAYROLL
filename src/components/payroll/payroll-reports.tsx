@@ -1489,9 +1489,11 @@ Please contact HR if you have any questions.`;
                   </thead>
                   <tbody>
                     {reportData
-                      .filter(row => 
-                        row.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                        row.id.toLowerCase().includes(searchQuery.toLowerCase())
+                      // Same guard as the other list pages -- a row for a
+                      // deleted/nameless employee shouldn't crash the report.
+                      .filter(row =>
+                        (row.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        (row.id ?? '').toLowerCase().includes(searchQuery.toLowerCase())
                       )
                       .map((row) => (
                       <tr key={row.id} className="border-b border-border/30 hover:bg-accent/5">

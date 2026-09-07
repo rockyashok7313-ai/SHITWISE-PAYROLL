@@ -964,7 +964,11 @@ export function AttendanceLogger() {
               </TableRow>
             )}
             {visibleEntries
-              .filter(e => e.name.toLowerCase().includes(searchQuery.toLowerCase()) || e.id.toLowerCase().includes(searchQuery.toLowerCase()))
+              // (e.name || e.id) guards an orphaned entry -- one whose employee
+              // record is gone or never had a name -- from crashing the whole
+              // page with "Cannot read properties of undefined (reading
+              // 'toLowerCase')" the moment it's rendered.
+              .filter(e => (e.name ?? '').toLowerCase().includes(searchQuery.toLowerCase()) || (e.id ?? '').toLowerCase().includes(searchQuery.toLowerCase()))
               .map((entry) => {
               // Shared payroll calculation, same as the dialog preview and the
               // payroll register -- so the previewed amount and the saved row
@@ -1345,9 +1349,12 @@ export function AttendanceLogger() {
                 </SelectTrigger>
                 <SelectContent>
                   {(employees && employees.length > 0 ? employees : EMPLOYEES)
+                    // role is optional on Employee (nullable in the DB) -- an
+                    // employee without one set would crash this the same way
+                    // the attendance-row filter above did.
                     .filter((emp: any) =>
-                      emp.name.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
-                      emp.role.toLowerCase().includes(dialogSearchQuery.toLowerCase())
+                      (emp.name ?? '').toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
+                      (emp.role ?? '').toLowerCase().includes(dialogSearchQuery.toLowerCase())
                     )
                     .map((emp: any) => (
                       <SelectItem key={emp.id} value={emp.id}>
