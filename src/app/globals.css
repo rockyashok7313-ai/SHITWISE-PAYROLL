@@ -6,34 +6,36 @@
   /* Light theme (default :root). Shared tokens (radius, custom colours) live
      here and are inherited by .dark.
      ----
-     2026 refresh: was a single corporate blue/cyan pair on razor-sharp 0.25rem
-     corners. Replaced with a vivid indigo primary, a distinct cyan accent (so
-     "primary action" and "informational" are never the same hue), a proper
-     5-hue chart palette (tailwind.config.ts already referenced --chart-1..5,
-     but nothing here ever defined them), and a softer 0.85rem radius. Every
-     shadcn primitive (Button, Card, Badge, Input, ...) reads these variables,
-     so this one edit reaches the whole app without touching component code. */
+     Material 3 refresh: primary/secondary/accent/surface/border/destructive
+     and --radius below are the real Material 3 baseline tokens (Google's
+     official M3 color roles + shape scale + elevation), pulled from Figma's
+     "Material 3 Design Kit" community library -- not hand-picked hex values.
+     accent = M3's "tertiary" role, destructive = M3's "error" role. The
+     --chart-* utility palette (stat chips, badges) isn't part of the M3 spec
+     itself and is left as-is; only the foundational tokens every shadcn
+     primitive reads (Button, Card, Badge, Input, ...) were swapped, so this
+     one edit reaches the whole app without touching component code. */
   :root {
-    --background: 240 25% 98%;
-    --foreground: 240 15% 9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 15% 9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 15% 9%;
-    --primary: 243 82% 60%;
+    --background: 293 100% 98%;
+    --foreground: 264 8% 12%;
+    --card: 278 44% 96%;
+    --card-foreground: 264 8% 12%;
+    --popover: 276 25% 92%;
+    --popover-foreground: 264 8% 12%;
+    --primary: 256 34% 48%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 240 20% 95%;
-    --secondary-foreground: 240 15% 15%;
-    --muted: 240 20% 96%;
-    --muted-foreground: 240 10% 45%;
-    --accent: 199 92% 48%;
+    --secondary: 263 65% 92%;
+    --secondary-foreground: 257 13% 31%;
+    --muted: 276 38% 95%;
+    --muted-foreground: 264 7% 29%;
+    --accent: 340 21% 41%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 350 85% 55%;
+    --destructive: 3 71% 41%;
     --destructive-foreground: 0 0% 100%;
-    --border: 240 18% 89%;
-    --input: 240 18% 89%;
-    --ring: 243 82% 60%;
-    --radius: 0.85rem;
+    --border: 270 11% 79%;
+    --input: 270 11% 79%;
+    --ring: 256 34% 48%;
+    --radius: 0.75rem;
 
     --chart-1: 243 82% 60%;
     --chart-2: 199 92% 48%;
@@ -45,39 +47,39 @@
     --warning-amber: #F59E0B;
     --success-teal: #14B8A6;
 
-    --sidebar-background: 240 25% 97%;
-    --sidebar-foreground: 240 12% 25%;
-    --sidebar-primary: 243 82% 60%;
+    --sidebar-background: 278 44% 96%;
+    --sidebar-foreground: 264 7% 29%;
+    --sidebar-primary: 256 34% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 20% 92%;
-    --sidebar-accent-foreground: 240 15% 15%;
-    --sidebar-border: 240 18% 88%;
-    --sidebar-ring: 243 82% 60%;
+    --sidebar-accent: 276 25% 92%;
+    --sidebar-accent-foreground: 264 8% 12%;
+    --sidebar-border: 270 11% 79%;
+    --sidebar-ring: 256 34% 48%;
   }
 
-  /* Dark theme. Was near-neutral grey (225 17% ...) -- shifted to a richer
-     indigo-black so the vivid primary/accent actually pop against it instead
-     of reading as pale on grey. */
+  /* Dark theme. M3's dark tonal palette -- note error/onError intentionally
+     flips (a pale error fill with dark text) to hold M3's own contrast
+     pairing rather than the usual "destructive is always saturated" assumption. */
   .dark {
-    --background: 245 35% 6%;
-    --foreground: 240 15% 97%;
-    --card: 245 30% 9%;
-    --card-foreground: 240 15% 97%;
-    --popover: 245 30% 8%;
-    --popover-foreground: 240 15% 97%;
-    --primary: 243 92% 70%;
-    --primary-foreground: 245 35% 8%;
-    --secondary: 245 25% 15%;
-    --secondary-foreground: 240 15% 95%;
-    --muted: 245 25% 13%;
-    --muted-foreground: 240 10% 65%;
-    --accent: 199 95% 58%;
-    --accent-foreground: 245 35% 8%;
-    --destructive: 350 90% 62%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 245 25% 18%;
-    --input: 245 25% 18%;
-    --ring: 243 92% 70%;
+    --background: 260 14% 8%;
+    --foreground: 280 17% 90%;
+    --card: 257 10% 14%;
+    --card-foreground: 280 17% 90%;
+    --popover: 257 8% 17%;
+    --popover-foreground: 280 17% 90%;
+    --primary: 258 100% 87%;
+    --primary-foreground: 259 58% 28%;
+    --secondary: 258 13% 31%;
+    --secondary-foreground: 263 65% 92%;
+    --muted: 257 10% 14%;
+    --muted-foreground: 270 11% 79%;
+    --accent: 343 63% 83%;
+    --accent-foreground: 338 33% 22%;
+    --destructive: 3 70% 83%;
+    --destructive-foreground: 3 71% 22%;
+    --border: 264 7% 29%;
+    --input: 264 7% 29%;
+    --ring: 258 100% 87%;
 
     --chart-1: 243 92% 70%;
     --chart-2: 199 95% 58%;
@@ -85,14 +87,14 @@
     --chart-4: 38 95% 58%;
     --chart-5: 330 85% 65%;
 
-    --sidebar-background: 245 35% 5%;
-    --sidebar-foreground: 240 12% 82%;
-    --sidebar-primary: 243 92% 70%;
-    --sidebar-primary-foreground: 245 35% 8%;
-    --sidebar-accent: 245 25% 15%;
-    --sidebar-accent-foreground: 240 15% 95%;
-    --sidebar-border: 245 25% 16%;
-    --sidebar-ring: 243 92% 70%;
+    --sidebar-background: 264 8% 12%;
+    --sidebar-foreground: 270 11% 79%;
+    --sidebar-primary: 258 100% 87%;
+    --sidebar-primary-foreground: 259 58% 28%;
+    --sidebar-accent: 257 8% 17%;
+    --sidebar-accent-foreground: 280 17% 90%;
+    --sidebar-border: 264 7% 29%;
+    --sidebar-ring: 258 100% 87%;
   }
 }
 
