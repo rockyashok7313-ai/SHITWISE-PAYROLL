@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { FadeIn } from "@/components/ui/motion"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { GradientOrbs } from "@/components/ui/gradient-orbs"
 
 const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
@@ -80,6 +81,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative">
+      <GradientOrbs />
       <LoginBackground />
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />

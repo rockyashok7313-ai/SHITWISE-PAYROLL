@@ -4,73 +4,95 @@
 
 @layer base {
   /* Light theme (default :root). Shared tokens (radius, custom colours) live
-     here and are inherited by .dark. */
+     here and are inherited by .dark.
+     ----
+     2026 refresh: was a single corporate blue/cyan pair on razor-sharp 0.25rem
+     corners. Replaced with a vivid indigo primary, a distinct cyan accent (so
+     "primary action" and "informational" are never the same hue), a proper
+     5-hue chart palette (tailwind.config.ts already referenced --chart-1..5,
+     but nothing here ever defined them), and a softer 0.85rem radius. Every
+     shadcn primitive (Button, Card, Badge, Input, ...) reads these variables,
+     so this one edit reaches the whole app without touching component code. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 225 20% 12%;
+    --background: 240 25% 98%;
+    --foreground: 240 15% 9%;
     --card: 0 0% 100%;
-    --card-foreground: 225 20% 12%;
+    --card-foreground: 240 15% 9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 225 20% 12%;
-    --primary: 226 80% 56%;
+    --popover-foreground: 240 15% 9%;
+    --primary: 243 82% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 225 20% 94%;
-    --secondary-foreground: 225 20% 18%;
-    --muted: 225 20% 96%;
-    --muted-foreground: 225 12% 42%;
-    --accent: 186 85% 38%;
+    --secondary: 240 20% 95%;
+    --secondary-foreground: 240 15% 15%;
+    --muted: 240 20% 96%;
+    --muted-foreground: 240 10% 45%;
+    --accent: 199 92% 48%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 78% 52%;
+    --destructive: 350 85% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 225 18% 88%;
-    --input: 225 18% 88%;
-    --ring: 226 80% 56%;
-    --radius: 0.25rem;
+    --border: 240 18% 89%;
+    --input: 240 18% 89%;
+    --ring: 243 82% 60%;
+    --radius: 0.85rem;
+
+    --chart-1: 243 82% 60%;
+    --chart-2: 199 92% 48%;
+    --chart-3: 160 84% 39%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 330 81% 60%;
 
     --metal-highlight: #C7CDD9;
-    --warning-amber: #F2A65A;
-    --success-teal: #2DD4BF;
+    --warning-amber: #F59E0B;
+    --success-teal: #14B8A6;
 
-    --sidebar-background: 225 20% 97%;
-    --sidebar-foreground: 225 12% 28%;
-    --sidebar-primary: 226 80% 56%;
+    --sidebar-background: 240 25% 97%;
+    --sidebar-foreground: 240 12% 25%;
+    --sidebar-primary: 243 82% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 225 20% 92%;
-    --sidebar-accent-foreground: 225 20% 18%;
-    --sidebar-border: 225 18% 88%;
-    --sidebar-ring: 226 80% 56%;
+    --sidebar-accent: 240 20% 92%;
+    --sidebar-accent-foreground: 240 15% 15%;
+    --sidebar-border: 240 18% 88%;
+    --sidebar-ring: 243 82% 60%;
   }
 
-  /* Dark theme (the original palette). */
+  /* Dark theme. Was near-neutral grey (225 17% ...) -- shifted to a richer
+     indigo-black so the vivid primary/accent actually pop against it instead
+     of reading as pale on grey. */
   .dark {
-    --background: 225 17% 7%;
-    --foreground: 0 0% 100%;
-    --card: 225 17% 10%;
-    --card-foreground: 0 0% 100%;
-    --popover: 225 17% 8%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 226 87% 66%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 225 17% 15%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 225 17% 12%;
-    --muted-foreground: 225 10% 65%;
-    --accent: 186 100% 50%;
-    --accent-foreground: 225 17% 7%;
-    --destructive: 0 84.2% 60.2%;
+    --background: 245 35% 6%;
+    --foreground: 240 15% 97%;
+    --card: 245 30% 9%;
+    --card-foreground: 240 15% 97%;
+    --popover: 245 30% 8%;
+    --popover-foreground: 240 15% 97%;
+    --primary: 243 92% 70%;
+    --primary-foreground: 245 35% 8%;
+    --secondary: 245 25% 15%;
+    --secondary-foreground: 240 15% 95%;
+    --muted: 245 25% 13%;
+    --muted-foreground: 240 10% 65%;
+    --accent: 199 95% 58%;
+    --accent-foreground: 245 35% 8%;
+    --destructive: 350 90% 62%;
     --destructive-foreground: 0 0% 100%;
-    --border: 225 17% 18%;
-    --input: 225 17% 18%;
-    --ring: 226 87% 66%;
+    --border: 245 25% 18%;
+    --input: 245 25% 18%;
+    --ring: 243 92% 70%;
 
-    --sidebar-background: 225 17% 5%;
-    --sidebar-foreground: 225 10% 80%;
-    --sidebar-primary: 226 87% 66%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 225 17% 15%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 225 17% 15%;
-    --sidebar-ring: 226 87% 66%;
+    --chart-1: 243 92% 70%;
+    --chart-2: 199 95% 58%;
+    --chart-3: 160 84% 48%;
+    --chart-4: 38 95% 58%;
+    --chart-5: 330 85% 65%;
+
+    --sidebar-background: 245 35% 5%;
+    --sidebar-foreground: 240 12% 82%;
+    --sidebar-primary: 243 92% 70%;
+    --sidebar-primary-foreground: 245 35% 8%;
+    --sidebar-accent: 245 25% 15%;
+    --sidebar-accent-foreground: 240 15% 95%;
+    --sidebar-border: 245 25% 16%;
+    --sidebar-ring: 243 92% 70%;
   }
 }
 

@@ -16,6 +16,7 @@ import { BackupRestorePanel } from "@/components/settings/backup-restore-panel"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { LifeBuoy, ChevronDown } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { GradientOrbs } from "@/components/ui/gradient-orbs"
 
 const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
@@ -111,6 +112,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative">
+      <GradientOrbs />
       <LoginBackground />
       <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />

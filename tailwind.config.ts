@@ -98,6 +98,20 @@ export default {
             height: '0',
           },
         },
+        // Three independent drift paths for GradientOrbs (src/components/ui/gradient-orbs.tsx)
+        // -- different durations/offsets per orb so they never move in sync.
+        'float-a': {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '50%': { transform: 'translate(3rem, 2rem) scale(1.1)' },
+        },
+        'float-b': {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '50%': { transform: 'translate(-2.5rem, 3rem) scale(1.15)' },
+        },
+        'float-c': {
+          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
+          '50%': { transform: 'translate(2rem, -2.5rem) scale(1.05)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
