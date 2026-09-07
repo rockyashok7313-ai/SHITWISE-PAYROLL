@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { HandCoins, Plus, Trash2, Check, X, Search, Pencil } from "lucide-react";
+import { HandCoins, Plus, Trash2, Check, X, Search, Pencil, Wallet, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAppContext } from "@/components/providers/app-provider";
 import { loanBalances, loanBalanceFor } from "@/lib/loans";
@@ -159,15 +159,30 @@ export function EmployeeLoans() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30">
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-amber-700 dark:text-amber-400">Total Outstanding</CardTitle></CardHeader>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm text-amber-700 dark:text-amber-400">Total Outstanding</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              <Wallet className="h-4 w-4" />
+            </div>
+          </CardHeader>
           <CardContent><div className="text-2xl font-bold font-mono">₹{totals.outstanding.toLocaleString('en-IN')}</div></CardContent>
         </Card>
         <Card className="bg-card/30">
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total Issued</CardTitle></CardHeader>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm text-muted-foreground">Total Issued</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--chart-2))]/15 text-[hsl(var(--chart-2))]">
+              <HandCoins className="h-4 w-4" />
+            </div>
+          </CardHeader>
           <CardContent><div className="text-2xl font-bold font-mono">₹{totals.issued.toLocaleString('en-IN')}</div></CardContent>
         </Card>
         <Card className="bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/30">
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-emerald-700 dark:text-emerald-400">Recovered So Far</CardTitle></CardHeader>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm text-emerald-700 dark:text-emerald-400">Recovered So Far</CardTitle>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+          </CardHeader>
           <CardContent><div className="text-2xl font-bold font-mono">₹{totals.repaid.toLocaleString('en-IN')}</div></CardContent>
         </Card>
       </div>

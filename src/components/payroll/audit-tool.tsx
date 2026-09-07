@@ -60,7 +60,9 @@ export function PayrollAuditTool() {
           <div className="flex items-center justify-between">
             <div className="space-y-1">
               <CardTitle className="font-headline text-2xl flex items-center gap-2">
-                <Sparkles className="w-6 h-6 text-accent" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-[hsl(var(--chart-5))]/20 text-accent">
+                  <Sparkles className="w-5 h-5" />
+                </span>
                 AI Payroll Audit Assistant
               </CardTitle>
               <CardDescription className="text-muted-foreground">

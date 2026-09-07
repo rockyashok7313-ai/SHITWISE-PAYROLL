@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ReceiptText, Trash2, Printer, Search, Download, Edit2, RefreshCw, AlertTriangle, Check, X } from "lucide-react";
+import { ReceiptText, Trash2, Printer, Search, Download, Edit2, RefreshCw, AlertTriangle, Check, X, Landmark, Banknote } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -841,16 +841,22 @@ export function SalaryVouchers() {
         <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="col-span-1 flex flex-col gap-6">
             <Card className="bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/30 flex-1 flex flex-col justify-center min-h-[140px]">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-emerald-600 dark:text-emerald-500">Bank Paid ({historyMonth} {historyYear})</CardTitle>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  <Landmark className="h-4 w-4" />
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono">₹{bankTotal.toLocaleString('en-IN')}</div>
               </CardContent>
             </Card>
             <Card className="bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 flex-1 flex flex-col justify-center min-h-[140px]">
-              <CardHeader className="pb-2">
+              <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-sm font-medium text-amber-600 dark:text-amber-500">Cash Paid ({historyMonth} {historyYear})</CardTitle>
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                  <Banknote className="h-4 w-4" />
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold font-mono">₹{cashTotal.toLocaleString('en-IN')}</div>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,11 +52,14 @@ export function ActivityLogs() {
   }, [activeCompanyId, tableFilter]);
 
   const getActionIcon = (action: string) => {
+    const chip = (icon: ReactNode, colorClass: string) => (
+      <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${colorClass}`}>{icon}</div>
+    );
     switch (action) {
-      case 'INSERT': return <PlusCircle className="w-4 h-4 text-emerald-500" />;
-      case 'UPDATE': return <Edit2 className="w-4 h-4 text-amber-500" />;
-      case 'DELETE': return <Trash2 className="w-4 h-4 text-red-500" />;
-      default: return <Activity className="w-4 h-4 text-blue-500" />;
+      case 'INSERT': return chip(<PlusCircle className="w-4 h-4" />, 'bg-emerald-500/15 text-emerald-500');
+      case 'UPDATE': return chip(<Edit2 className="w-4 h-4" />, 'bg-amber-500/15 text-amber-500');
+      case 'DELETE': return chip(<Trash2 className="w-4 h-4" />, 'bg-red-500/15 text-red-500');
+      default: return chip(<Activity className="w-4 h-4" />, 'bg-blue-500/15 text-blue-500');
     }
   };
 

@@ -64,7 +64,9 @@ export function ChangePassword() {
     <Card className="bg-card/30 border-border">
       <CardHeader>
         <CardTitle className="font-headline flex items-center gap-2">
-          <KeyRound className="w-5 h-5 text-accent" />
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-accent">
+            <KeyRound className="w-4 h-4" />
+          </span>
           Change Password
         </CardTitle>
         <CardDescription>Update the password used to sign in to your account.</CardDescription>

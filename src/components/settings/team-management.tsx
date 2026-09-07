@@ -102,7 +102,9 @@ export function TeamManagement({ activeCompanyId }: { activeCompanyId: string })
       <Card>
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
-            <Shield className="w-5 h-5 text-accent" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-accent">
+              <Shield className="w-4 h-4" />
+            </span>
             Team Access Management
           </CardTitle>
           <CardDescription>

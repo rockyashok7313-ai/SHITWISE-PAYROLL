@@ -282,7 +282,9 @@ export function FactorySettings() {
           <Card className="bg-card/30 border-border">
             <CardHeader>
               <CardTitle className="font-headline flex items-center gap-2">
-                <Factory className="w-5 h-5 text-primary" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                  <Factory className="w-4 h-4" />
+                </span>
                 Company Profile
               </CardTitle>
               <CardDescription>Basic identification for reports and payslips.</CardDescription>
@@ -314,7 +316,9 @@ export function FactorySettings() {
           <Card className="bg-card/30 border-border">
             <CardHeader>
               <CardTitle className="font-headline flex items-center gap-2">
-                <CalendarRange className="w-5 h-5 text-accent" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--chart-2))]/15 text-[hsl(var(--chart-2))]">
+                  <CalendarRange className="w-4 h-4" />
+                </span>
                 Reporting Period
               </CardTitle>
               <CardDescription>Configure the active Financial Year for statutory tracking.</CardDescription>
@@ -346,7 +350,9 @@ export function FactorySettings() {
           <Card className="bg-card/30 border-border">
             <CardHeader>
               <CardTitle className="font-headline flex items-center gap-2">
-                <Clock className="w-5 h-5 text-accent" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--chart-4))]/15 text-[hsl(var(--chart-4))]">
+                  <Clock className="w-4 h-4" />
+                </span>
                 Shift Definitions
               </CardTitle>
               <CardDescription>Configure default durations for shift types.</CardDescription>
@@ -380,7 +386,9 @@ export function FactorySettings() {
           <Card className="bg-card/30 border-border">
             <CardHeader>
               <CardTitle className="font-headline flex items-center gap-2">
-                <IndianRupee className="w-5 h-5 text-green-500" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-500">
+                  <IndianRupee className="w-4 h-4" />
+                </span>
                 Financial Presets
               </CardTitle>
               <CardDescription>Default values for payout calculations.</CardDescription>

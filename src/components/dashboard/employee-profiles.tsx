@@ -504,7 +504,14 @@ export function EmployeeProfiles() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={emp.shift === '12-hour' ? 'text-accent border-accent/20' : 'text-primary border-primary/20'}>
+                        <Badge
+                          variant="outline"
+                          className={
+                            emp.shift === '12-hour'
+                              ? 'bg-[hsl(var(--chart-2))]/10 text-[hsl(var(--chart-2))] border-[hsl(var(--chart-2))]/25'
+                              : 'bg-[hsl(var(--chart-5))]/10 text-[hsl(var(--chart-5))] border-[hsl(var(--chart-5))]/25'
+                          }
+                        >
                           {emp.shift}
                         </Badge>
                       </TableCell>

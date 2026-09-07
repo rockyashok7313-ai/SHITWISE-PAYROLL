@@ -32,7 +32,9 @@ export default function SettingsPage() {
         <Card className="bg-card/30 border-border">
           <CardHeader>
             <CardTitle className="font-headline flex items-center gap-2">
-              <DatabaseBackup className="w-5 h-5 text-accent" />
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--chart-2))]/15 text-[hsl(var(--chart-2))]">
+                <DatabaseBackup className="w-4 h-4" />
+              </span>
               Data Backup &amp; Restore
             </CardTitle>
             <CardDescription>
@@ -49,7 +51,9 @@ export default function SettingsPage() {
           <Card className="bg-card/30 border-border">
             <CardHeader>
               <CardTitle className="font-headline flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-accent" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[hsl(var(--chart-4))]/15 text-[hsl(var(--chart-4))]">
+                  <ArrowRightLeft className="w-4 h-4" />
+                </span>
                 Move Attendance Between Months
               </CardTitle>
               <CardDescription>
