@@ -21,28 +21,28 @@ export function TeamManagement({ activeCompanyId }: { activeCompanyId: string })
   const [newRole, setNewRole] = useState("accountant");
   const [isInviting, setIsInviting] = useState(false);
 
-  useEffect(() => {
-    async function loadMembers() {
-      if (!activeCompanyId) return;
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('company_members')
-          .select('id, user_id, role, created_at')
-          .eq('company_id', activeCompanyId);
-        
-        if (error) throw error;
-        
-        // Normally we'd join with auth.users to get email, but since that's restricted,
-        // we might rely on an edge function or a separate profiles table.
-        // For now we'll just display the user_id.
-        setMembers(data || []);
-      } catch (err: any) {
-        toast({ variant: "destructive", title: "Error", description: err.message });
-      } finally {
-        setLoading(false);
-      }
+  const loadMembers = async () => {
+    if (!activeCompanyId) return;
+    setLoading(true);
+    try {
+      // Goes through the team-invite edge function (action "list") rather
+      // than querying company_members directly -- resolving each member's
+      // email needs the service-role admin API, which only that function
+      // has access to. See supabase/functions/team-invite.
+      const { data, error } = await supabase.functions.invoke('team-invite', {
+        body: { action: 'list', company_id: activeCompanyId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setMembers(data?.members || []);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadMembers();
   }, [activeCompanyId]);
 
@@ -50,16 +50,26 @@ export function TeamManagement({ activeCompanyId }: { activeCompanyId: string })
     if (!newEmail || !activeCompanyId) return;
     setIsInviting(true);
     try {
-      // In a real app, we'd trigger an edge function to invite by email.
-      // Here we assume the user already exists and we just need their UUID,
-      // or we just mock the insertion if we are the owner.
-      // For this demo, let's just insert a fake member to show it works,
-      // or we can call an edge function if it exists.
+      const { data, error } = await supabase.functions.invoke('team-invite', {
+        body: {
+          action: 'invite',
+          company_id: activeCompanyId,
+          email: newEmail,
+          role: newRole,
+          redirectTo: `${window.location.origin}/reset-password`,
+        },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
       toast({
-        title: "Invitation Sent",
-        description: `Invited ${newEmail} as ${newRole}.`,
+        title: data.alreadyHadAccount ? "Added to Team" : "Invitation Sent",
+        description: data.alreadyHadAccount
+          ? `${newEmail} already had an account and now has access as ${newRole}.`
+          : `An invite email is on its way to ${newEmail} (role: ${newRole}).`,
       });
       setNewEmail("");
+      await loadMembers();
     } catch (err: any) {
       toast({ variant: "destructive", title: "Error", description: err.message });
     } finally {
@@ -70,13 +80,12 @@ export function TeamManagement({ activeCompanyId }: { activeCompanyId: string })
   const handleRemove = async (id: string) => {
     if (!activeCompanyId) return;
     try {
-      const { error } = await supabase
-        .from('company_members')
-        .delete()
-        .eq('id', id);
-      
+      const { data, error } = await supabase.functions.invoke('team-invite', {
+        body: { action: 'remove', company_id: activeCompanyId, member_id: id },
+      });
       if (error) throw error;
-      
+      if (data?.error) throw new Error(data.error);
+
       setMembers(members.filter(m => m.id !== id));
       toast({ title: "Member Removed" });
     } catch (err: any) {
@@ -169,7 +178,7 @@ export function TeamManagement({ activeCompanyId }: { activeCompanyId: string })
                 ) : (
                   members.map(member => (
                     <TableRow key={member.id}>
-                      <TableCell className="font-mono text-sm">{member.user_id}</TableCell>
+                      <TableCell className="text-sm">{member.email || <span className="font-mono text-muted-foreground">{member.user_id}</span>}</TableCell>
                       <TableCell className="capitalize">{member.role}</TableCell>
                       <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
                       <TableCell className="text-right">
