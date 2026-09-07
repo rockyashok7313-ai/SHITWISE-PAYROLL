@@ -7,11 +7,13 @@ import { payrollAuditAssistant, type PayrollAuditOutput } from "@/ai/flows/payro
 import { Sparkles, Loader2, AlertTriangle, TrendingUp, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 
 import { useAppContext } from "@/components/providers/app-provider";
 
 export function PayrollAuditTool() {
   const { employees } = useAppContext();
+  const { toast } = useToast();
   const [isAuditing, setIsAuditing] = useState(false);
   const [results, setResults] = useState<PayrollAuditOutput | null>(null);
 
@@ -35,8 +37,17 @@ export function PayrollAuditTool() {
         forecastPeriodMonths: 3
       });
       setResults(res);
-    } catch (error) {
+    } catch (error: any) {
+      // This used to only console.error -- on the live site (where the
+      // Gemini API key wasn't configured until now) that meant clicking
+      // "Run Global Audit" just silently did nothing with no way to tell
+      // it had failed short of opening devtools.
       console.error("Audit failed", error);
+      toast({
+        variant: "destructive",
+        title: "Audit Failed",
+        description: error?.message || "Could not run the payroll audit. Please try again.",
+      });
     } finally {
       setIsAuditing(false);
     }
