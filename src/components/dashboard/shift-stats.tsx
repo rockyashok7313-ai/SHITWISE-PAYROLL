@@ -3,17 +3,21 @@ import { Clock, Users, IndianRupee, TrendingUp } from "lucide-react";
 
 import { useAppContext } from "@/components/providers/app-provider";
 import { TiltCard } from "@/components/ui/tilt-card";
+import { calculateEntryBreakdown } from "@/lib/payroll";
 
 export function ShiftStats() {
   const { employees = [], attendance = [] } = useAppContext();
   const activeEmployees = employees.length;
   const hoursToday = attendance.reduce((acc, curr) => acc + (curr.hours || 0), 0);
-  
+
+  // Was its own inline formula here -- gross = (hours / shiftHrs) * rate,
+  // dividing by the shift length instead of multiplying by it. That very
+  // nearly zeroed out gross pay, so any real loan/advance on the row swamped
+  // it and this card showed a wildly negative "cost". Route through the
+  // shared calculator (lib/payroll.ts) instead, same as the register, the
+  // payslip and the voucher, so this card can't drift from those again.
   const projectedCost = attendance.reduce((acc, curr) => {
-    const shiftHrs = curr.shift === '12-hour' ? 12 : 9;
-    const rate = curr.rate || 0;
-    const gross = (curr.hours / shiftHrs) * rate;
-    const net = gross + (curr.incentive || 0) - (curr.weeklyAdvance || 0) - (curr.loan || 0);
+    const { net } = calculateEntryBreakdown(curr, { rate: 0 });
     return acc + net;
   }, 0);
 

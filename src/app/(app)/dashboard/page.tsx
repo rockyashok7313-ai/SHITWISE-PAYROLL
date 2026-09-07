@@ -9,6 +9,7 @@ import { useAppContext } from "@/components/providers/app-provider";
 import { TiltCard } from "@/components/ui/tilt-card";
 import { Stagger, StaggerItem } from "@/components/ui/motion";
 import dynamic from "next/dynamic";
+import { calculateEntryBreakdown } from "@/lib/payroll";
 
 const LiveShiftGauge = dynamic(() => import("@/components/ui/shift-gauge").then(m => m.LiveShiftGauge), { ssr: false });
 
@@ -68,10 +69,13 @@ export default function DashboardPage() {
                       </TableCell>
                     </TableRow>
                   ) : attendance.slice(0, 5).map((record: any) => {
-                    const shiftHrs = record.shift === '12-hour' ? 12 : 9;
-                    const gross = (record.hours / shiftHrs) * (record.rate || 0);
-                    const earnings = gross + (record.incentive || 0) - (record.weeklyAdvance || 0) - (record.loan || 0);
-                    
+                    // Was its own inline formula here -- gross = (hours / shiftHrs) * rate,
+                    // dividing by the shift length instead of multiplying by it (see
+                    // the identical fix in shift-stats.tsx). Route through the shared
+                    // calculator instead so this table can't drift from the register,
+                    // the payslip or the voucher again.
+                    const { net: earnings } = calculateEntryBreakdown(record, { rate: 0 });
+
                     return (
                       <TableRow key={record.id} className="border-border hover:bg-muted/10">
                         <TableCell className="font-medium text-muted-foreground">{record.date}</TableCell>

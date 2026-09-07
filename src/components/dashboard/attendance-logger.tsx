@@ -530,10 +530,16 @@ export function AttendanceLogger() {
     // Scoped to the currently viewed month's rows only. entries is the whole
     // historical set, so applying unconditionally would silently overwrite
     // shift data in every month ever recorded, not just this one.
+    //
+    // Only `shift` changes here. This used to also reset `hours` (the day
+    // count -- e.g. 26 for a month, not a clock-hour figure) to a flat 12 or
+    // 9, which silently destroyed whatever real day count a row already had
+    // and badly corrupted its pay. The day count a supervisor already
+    // entered has nothing to do with which shift type is selected.
     const visibleIds = new Set(visibleEntries.map(e => e.id));
     setEntries(prev => prev.map(entry =>
       visibleIds.has(entry.id)
-        ? { ...entry, shift: bulkShift, hours: bulkShift === '12-hour' ? 12 : 9, isModified: true }
+        ? { ...entry, shift: bulkShift, isModified: true }
         : entry
     ));
     toast({
@@ -1021,11 +1027,14 @@ export function AttendanceLogger() {
                   </TableCell>
                   <TableCell>
                     {isEditing ? (
-                      <Select 
-                        value={entry.shift} 
+                      <Select
+                        value={entry.shift}
                         onValueChange={(val) => {
-                          const hrs = val === '12-hour' ? 12 : 9;
-                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, shift: val as '9-hour' | '12-hour', hours: hrs, isModified: true } : item));
+                          // Only `shift` changes here -- see the identical fix and
+                          // explanation in applyBulkSettings above. Overwriting
+                          // `hours` (the day count) to a flat 12 or 9 on a shift
+                          // change destroyed whatever real day count this row had.
+                          setEntries(prev => prev.map(item => item.id === entry.id ? { ...item, shift: val as '9-hour' | '12-hour', isModified: true } : item));
                         }}
                       >
                         <SelectTrigger className="h-11 bg-background border-muted w-[130px]">
