@@ -43,7 +43,12 @@ export function ChangePassword() {
         password: currentPassword,
       })
       if (verifyError) {
-        throw new Error("Current password is incorrect.")
+        // Only claim the password itself is wrong for an actual bad-credentials
+        // response. Anything else (rate limiting, a network blip, the project
+        // being briefly unreachable) used to get relabeled "Current password
+        // is incorrect" too, which sent people looking in the wrong place.
+        const isBadCredentials = verifyError.message?.toLowerCase().includes('invalid login credentials')
+        throw new Error(isBadCredentials ? "Current password is incorrect." : verifyError.message)
       }
 
       const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
