@@ -8,6 +8,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { ThemeColorPicker } from "@/components/ui/theme-color-picker";
 import { SaveIndicator } from "@/components/ui/save-indicator";
 import { CompanySwitcher } from "@/components/layout/company-switcher";
 import { supabase } from "@/lib/supabase";
@@ -131,7 +132,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="p-4 border-t border-sidebar-border space-y-1">
             <div className="flex items-center justify-between px-3 py-2">
               <span className="text-sm font-medium text-sidebar-foreground">Theme</span>
-              <ThemeToggle />
+              <div className="flex items-center gap-1.5">
+                <ThemeColorPicker />
+                <ThemeToggle />
+              </div>
             </div>
             <Button
               variant="ghost"

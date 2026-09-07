@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
+import { ThemeColorPicker } from "@/components/ui/theme-color-picker"
 import { BackupRestorePanel } from "@/components/settings/backup-restore-panel"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { LifeBuoy, ChevronDown } from "lucide-react"
@@ -114,7 +115,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4 relative">
       <GradientOrbs />
       <LoginBackground />
-      <div className="absolute top-4 right-4 z-20">
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5">
+        <ThemeColorPicker />
         <ThemeToggle />
       </div>
       <FadeIn y={16} className="w-full max-w-md relative z-10">
