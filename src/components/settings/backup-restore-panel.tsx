@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Download, Upload, DatabaseBackup, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -30,9 +30,20 @@ export function BackupRestorePanel({ className }: { className?: string }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [lastBackupAt, setLastBackupAt] = useState<string | null>(() =>
-    typeof window !== "undefined" ? getLastBackupAt(window.localStorage) : null
-  );
+  // Starts null on both server and the client's first render on purpose --
+  // reading localStorage synchronously here (as this used to) made the
+  // client's very first paint diverge from the server-rendered "no backup
+  // yet" text whenever this browser already had one, which is any returning
+  // visitor. That's a textbook hydration mismatch (React error #418), and it
+  // was firing on every /login load since this panel stays mounted (just
+  // visually collapsed) in the "Trouble signing in?" section there. Reading
+  // the real value in an effect, after hydration, avoids it -- same pattern
+  // ThemeToggle already uses for its own client-only value.
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLastBackupAt(getLastBackupAt(window.localStorage));
+  }, []);
 
   const handleDownload = () => {
     try {
