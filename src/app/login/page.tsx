@@ -15,6 +15,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { BackupRestorePanel } from "@/components/settings/backup-restore-panel"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
 import { LifeBuoy, ChevronDown } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 
 const LoginBackground = dynamic(() => import("@/components/ui/login-background").then(m => m.LoginBackground), { ssr: false })
 
@@ -23,6 +24,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [recoveryOpen, setRecoveryOpen] = useState(false)
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetLoading, setResetLoading] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -78,6 +82,33 @@ export default function LoginPage() {
     }
   }
 
+  const handleForgotPassword = async () => {
+    if (!resetEmail) {
+      toast({ variant: "destructive", title: "Error", description: "Enter your email address first." })
+      return
+    }
+
+    setResetLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+      if (error) throw error
+      // Deliberately the same message whether or not the address has an
+      // account -- confirming which emails exist would leak that.
+      toast({
+        title: "Check Your Email",
+        description: `If an account exists for ${resetEmail}, a password reset link is on its way.`,
+      })
+      setForgotOpen(false)
+      setResetEmail("")
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error", description: error.message || "Could not send the reset email." })
+    } finally {
+      setResetLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative">
       <LoginBackground />
@@ -130,6 +161,15 @@ export default function LoginPage() {
                 className="pl-10 bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
                 onKeyDown={(e) => e.key === 'Enter' && handleAuth(false)}
               />
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => { setResetEmail(email); setForgotOpen(true) }}
+              >
+                Forgot password?
+              </button>
             </div>
           </div>
           </StaggerItem>
@@ -193,6 +233,41 @@ export default function LoginPage() {
           </CollapsibleContent>
         </Collapsible>
       </FadeIn>
+
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Enter your account email and we&apos;ll send a link to set a new password.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="reset-email">Email Address</Label>
+            <div className="relative">
+              <Mail className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="admin@factory.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                className="pl-10"
+                onKeyDown={(e) => e.key === 'Enter' && handleForgotPassword()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForgotOpen(false)} disabled={resetLoading}>
+              Cancel
+            </Button>
+            <Button onClick={handleForgotPassword} disabled={resetLoading}>
+              {resetLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Send Reset Link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

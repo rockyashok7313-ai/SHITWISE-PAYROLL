@@ -4,6 +4,7 @@ import { FactorySettings } from "@/components/settings/factory-settings";
 import { TeamManagement } from "@/components/settings/team-management";
 import { BackupRestorePanel } from "@/components/settings/backup-restore-panel";
 import { MoveAttendancePeriod } from "@/components/settings/move-attendance-period";
+import { ChangePassword } from "@/components/settings/change-password";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { DatabaseBackup, ArrowRightLeft } from "lucide-react";
 import { useAppContext } from "@/components/providers/app-provider";
@@ -27,6 +28,7 @@ export default function SettingsPage() {
         {activeCompanyId && (
           <TeamManagement activeCompanyId={activeCompanyId} />
         )}
+        <ChangePassword />
         <Card className="bg-card/30 border-border">
           <CardHeader>
             <CardTitle className="font-headline flex items-center gap-2">
