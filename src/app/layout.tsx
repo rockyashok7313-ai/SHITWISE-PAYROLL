@@ -4,6 +4,7 @@ import '@fontsource/jetbrains-mono/700.css';
 import './globals.css';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { ThemeColorProvider } from '@/components/providers/theme-color-provider';
+import { Toaster } from '@/components/ui/toaster';
 
 export const metadata: Metadata = {
   title: 'ShiftWise Payroll',
@@ -37,6 +38,13 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
           <ThemeColorProvider>
             {children}
+            {/* Renders whatever's in useToast()'s (module-level, not
+                context-scoped) store -- every toast() call anywhere in the
+                app needs this mounted somewhere to actually become visible.
+                It never was: every toast, on every page, has been firing
+                and updating that store with zero on-screen effect this
+                whole time. */}
+            <Toaster />
           </ThemeColorProvider>
         </ThemeProvider>
       </body>
